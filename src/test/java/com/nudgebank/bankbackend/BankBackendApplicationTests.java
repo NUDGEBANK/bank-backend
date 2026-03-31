@@ -8,7 +8,7 @@ class BankBackendApplicationTests {
 
     @Test
     void contextLoads() {
-        System.out.println("test");
+        System.out.println("test2");
     }
 
 }
