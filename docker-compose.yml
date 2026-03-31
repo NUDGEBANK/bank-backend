@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: nudgebank
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       TZ: Asia/Seoul
     ports:
       - "5432:5432"
