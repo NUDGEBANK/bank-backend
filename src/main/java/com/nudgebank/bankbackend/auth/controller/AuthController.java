@@ -3,8 +3,8 @@ package com.nudgebank.bankbackend.auth.controller;
 import com.nudgebank.bankbackend.auth.dto.AuthResponse;
 import com.nudgebank.bankbackend.auth.dto.LoginRequest;
 import com.nudgebank.bankbackend.auth.dto.SignupRequest;
-import com.nudgebank.bankbackend.auth.entity.RefreshToken;
-import com.nudgebank.bankbackend.auth.entity.User;
+import com.nudgebank.bankbackend.auth.domain.RefreshToken;
+import com.nudgebank.bankbackend.auth.domain.Member;
 import com.nudgebank.bankbackend.auth.security.CookieUtil;
 import com.nudgebank.bankbackend.auth.security.JwtProvider;
 import com.nudgebank.bankbackend.auth.service.AuthService;
@@ -36,8 +36,8 @@ public class AuthController {
   @PostMapping("/signup")
   public ResponseEntity<AuthResponse> signup(@RequestBody SignupRequest request, HttpServletResponse res) {
     try {
-      User user = authService.signup(request);
-      AuthService.TokenPair tokens = authService.issueTokens(user);
+      Member member = authService.signup(request);
+      AuthService.TokenPair tokens = authService.issueTokens(member);
       setAuthCookies(res, tokens);
       return ResponseEntity.ok(new AuthResponse(true, "OK"));
     } catch (IllegalArgumentException ex) {
@@ -48,8 +48,8 @@ public class AuthController {
   @PostMapping("/login")
   public ResponseEntity<AuthResponse> login(@RequestBody LoginRequest request, HttpServletResponse res) {
     try {
-      User user = authService.login(request);
-      AuthService.TokenPair tokens = authService.issueTokens(user);
+      Member member = authService.login(request);
+      AuthService.TokenPair tokens = authService.issueTokens(member);
       setAuthCookies(res, tokens);
       return ResponseEntity.ok(new AuthResponse(true, "OK"));
     } catch (IllegalArgumentException ex) {
@@ -89,11 +89,11 @@ public class AuthController {
     }
 
     Long userId = Long.parseLong(claims.getSubject());
-    User user = new User();
-    user.setId(userId);
+    Member member = new Member();
+    member.setMemberId(userId);
 
     authService.deleteRefreshTokenByRid(rid);
-    AuthService.TokenPair tokens = authService.issueTokens(user);
+    AuthService.TokenPair tokens = authService.issueTokens(member);
     setAuthCookies(res, tokens);
     return ResponseEntity.ok(new AuthResponse(true, "OK"));
   }
