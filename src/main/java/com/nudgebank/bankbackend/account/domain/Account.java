@@ -1,4 +1,4 @@
-package com.nudgebank.bankbackend.account.entity;
+package com.nudgebank.bankbackend.account.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -13,31 +13,31 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "`계좌`")
+@Table(name = "`account`")
 @Getter
 @Setter
 @NoArgsConstructor
 public class Account {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
-  @Column(name = "`계좌ID`")
+  @Column(name = "`accountID`")
   private Long id;
 
-  @Column(name = "`멤버ID`", nullable = false)
+  @Column(name = "`memberID`", nullable = false)
   private Long memberId;
 
-  @Column(name = "`계좌명`", nullable = false, length = 100)
+  @Column(name = "`accountName`", nullable = false, length = 100)
   private String accountName;
 
-  @Column(name = "`계좌번호`", nullable = false, length = 30, unique = true)
+  @Column(name = "`accountNumber`", nullable = false, length = 30, unique = true)
   private String accountNumber;
 
-  @Column(name = "`잔고`", nullable = false, precision = 15, scale = 2)
+  @Column(name = "`balance`", nullable = false, precision = 15, scale = 2)
   private BigDecimal balance;
 
-  @Column(name = "`개설일`", nullable = false)
+  @Column(name = "`openedAt`", nullable = false)
   private OffsetDateTime openedAt;
 
-  @Column(name = "`보호잔액`", nullable = false)
+  @Column(name = "`protectedBalance`", nullable = false)
   private Long protectedBalance;
 }

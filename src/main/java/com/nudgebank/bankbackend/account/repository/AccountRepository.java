@@ -1,6 +1,6 @@
 package com.nudgebank.bankbackend.account.repository;
 
-import com.nudgebank.bankbackend.account.entity.Account;
+import com.nudgebank.bankbackend.account.domain.Account;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 

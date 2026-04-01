@@ -1,6 +1,6 @@
 package com.nudgebank.bankbackend.card.repository;
 
-import com.nudgebank.bankbackend.card.entity.Card;
+import com.nudgebank.bankbackend.card.domain.Card;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 

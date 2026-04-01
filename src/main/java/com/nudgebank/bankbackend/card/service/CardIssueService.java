@@ -1,12 +1,12 @@
 package com.nudgebank.bankbackend.card.service;
 
-import com.nudgebank.bankbackend.account.entity.Account;
+import com.nudgebank.bankbackend.account.domain.Account;
 import com.nudgebank.bankbackend.account.repository.AccountRepository;
 import com.nudgebank.bankbackend.auth.entity.User;
 import com.nudgebank.bankbackend.auth.repository.UserRepository;
 import com.nudgebank.bankbackend.card.dto.CardIssueRequest;
 import com.nudgebank.bankbackend.card.dto.CardIssueResponse;
-import com.nudgebank.bankbackend.card.entity.Card;
+import com.nudgebank.bankbackend.card.domain.Card;
 import com.nudgebank.bankbackend.card.repository.CardRepository;
 import java.math.BigDecimal;
 import java.security.SecureRandom;

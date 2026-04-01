@@ -1,4 +1,4 @@
-package com.nudgebank.bankbackend.card.entity;
+package com.nudgebank.bankbackend.card.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -12,34 +12,34 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "`카드`")
+@Table(name = "`card`")
 @Getter
 @Setter
 @NoArgsConstructor
 public class Card {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
-  @Column(name = "`카드ID`")
+  @Column(name = "`cardID`")
   private Long id;
 
-  @Column(name = "`계좌ID`", nullable = false)
+  @Column(name = "`accountID`", nullable = false)
   private Long accountId;
 
-  @Column(name = "`카드번호`", nullable = false, length = 30, unique = true)
+  @Column(name = "`cardNumber`", nullable = false, length = 30, unique = true)
   private String cardNumber;
 
-  @Column(name = "`발급일`", nullable = false)
+  @Column(name = "`issuedAt`", nullable = false)
   private OffsetDateTime issuedAt;
 
-  @Column(name = "`유효기간`", nullable = false, length = 5)
+  @Column(name = "`validThru`", nullable = false, length = 5)
   private String validThru;
 
-  @Column(name = "`비밀번호`", nullable = false, length = 100)
+  @Column(name = "`password`", nullable = false, length = 100)
   private String password;
 
-  @Column(name = "`CVC`", nullable = false, length = 3)
+  @Column(name = "`cvc`", nullable = false, length = 3)
   private String cvc;
 
-  @Column(name = "`상태`", nullable = false, length = 20)
+  @Column(name = "`status`", nullable = false, length = 20)
   private String status;
 }
