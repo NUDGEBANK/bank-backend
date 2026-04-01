@@ -1,6 +1,6 @@
 package com.nudgebank.bankbackend.auth.repository;
 
-import com.nudgebank.bankbackend.auth.entity.RefreshToken;
+import com.nudgebank.bankbackend.auth.domain.RefreshToken;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
