@@ -1,10 +1,10 @@
 package com.nudgebank.bankbackend.auth.repository;
 
-import com.nudgebank.bankbackend.auth.domain.User;
+import com.nudgebank.bankbackend.auth.domain.Member;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface UserRepository extends JpaRepository<User, Long> {
-  Optional<User> findByUserId(String userId);
+public interface MemberRepository extends JpaRepository<Member, Long> {
+  Optional<Member> findByUserId(String userId);
   boolean existsByUserId(String userId);
 }

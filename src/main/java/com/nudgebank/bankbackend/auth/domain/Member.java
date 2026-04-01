@@ -8,34 +8,40 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
 @Table(
-    name = "users",
-    uniqueConstraints = @UniqueConstraint(columnNames = "userId")
+    name = "member",
+    uniqueConstraints = @UniqueConstraint(columnNames = "id")
 )
 @Getter
 @Setter
 @NoArgsConstructor
-public class User {
+public class Member {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
+  @Column(name = "member_id")
   private Long id;
 
-  @Column(nullable = false, length = 50)
+  @Column(name = "id", nullable = false, length = 100)
   private String userId;
 
-  @Column(nullable = false, length = 100)
+  @Column(name = "name", nullable = false, length = 100)
   private String name;
 
-  @Column(nullable = false, length = 255)
+  @Column(name = "password", nullable = false, length = 255)
   private String passwordHash;
 
+  @Column(name = "birth")
   private LocalDate birth;
 
-  @Column(length = 10)
+  @Column(name = "created_at", nullable = false)
+  private OffsetDateTime createdAt;
+
+  @Column(name = "gender", length = 10)
   private String gender;
 }
