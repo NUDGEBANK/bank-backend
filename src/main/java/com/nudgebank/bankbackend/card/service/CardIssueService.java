@@ -14,6 +14,7 @@ import java.time.OffsetDateTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import org.springframework.stereotype.Service;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -24,16 +25,19 @@ public class CardIssueService {
   private final UserRepository userRepository;
   private final AccountRepository accountRepository;
   private final CardRepository cardRepository;
+  private final PasswordEncoder passwordEncoder;
   private final SecureRandom secureRandom = new SecureRandom();
 
   public CardIssueService(
       UserRepository userRepository,
       AccountRepository accountRepository,
-      CardRepository cardRepository
+      CardRepository cardRepository,
+      PasswordEncoder passwordEncoder
   ) {
     this.userRepository = userRepository;
     this.accountRepository = accountRepository;
     this.cardRepository = cardRepository;
+    this.passwordEncoder = passwordEncoder;
   }
 
   @Transactional
@@ -66,7 +70,7 @@ public class CardIssueService {
     card.setCardNumber(generateUniqueCardNumber());
     card.setIssuedAt(now);
     card.setValidThru(YearMonth.now().plusYears(5).format(VALID_THRU_FORMATTER));
-    card.setPassword(request.cardPassword());
+    card.setPassword(passwordEncoder.encode(request.cardPassword()));
     card.setCvc(generateFixedDigits(3));
     card.setStatus("ACTIVE");
     Card savedCard = cardRepository.save(card);
