@@ -90,7 +90,7 @@ public class AuthController {
 
     Long userId = Long.parseLong(claims.getSubject());
     Member member = new Member();
-    member.setId(userId);
+    member.setMemberId(userId);
 
     authService.deleteRefreshTokenByRid(rid);
     AuthService.TokenPair tokens = authService.issueTokens(member);
