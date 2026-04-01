@@ -1,4 +1,4 @@
-package com.nudgebank.bankbackend.auth.entity;
+package com.nudgebank.bankbackend.auth.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

@@ -2,8 +2,8 @@ package com.nudgebank.bankbackend.auth.service;
 
 import com.nudgebank.bankbackend.auth.dto.LoginRequest;
 import com.nudgebank.bankbackend.auth.dto.SignupRequest;
-import com.nudgebank.bankbackend.auth.entity.RefreshToken;
-import com.nudgebank.bankbackend.auth.entity.User;
+import com.nudgebank.bankbackend.auth.domain.RefreshToken;
+import com.nudgebank.bankbackend.auth.domain.User;
 import com.nudgebank.bankbackend.auth.repository.RefreshTokenRepository;
 import com.nudgebank.bankbackend.auth.repository.UserRepository;
 import com.nudgebank.bankbackend.auth.security.JwtProvider;
