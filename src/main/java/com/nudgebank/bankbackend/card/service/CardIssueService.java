@@ -66,7 +66,7 @@ public class CardIssueService {
     Account savedAccount = accountRepository.save(account);
 
     Card card = new Card();
-    card.setAccountId(savedAccount.getId());
+    card.setAccountId(savedAccount.getAccountId());
     card.setCardNumber(generateUniqueCardNumber());
     card.setIssuedAt(now);
     card.setValidThru(YearMonth.now().plusYears(5).format(VALID_THRU_FORMATTER));
@@ -78,11 +78,11 @@ public class CardIssueService {
     return new CardIssueResponse(
         true,
         "OK",
-        savedAccount.getId(),
+        savedAccount.getAccountId(),
         savedAccount.getAccountName(),
         savedAccount.getAccountNumber(),
         savedAccount.getBalance(),
-        savedCard.getId(),
+        savedCard.getCardId(),
         savedCard.getCardNumber(),
         savedCard.getValidThru(),
         savedCard.getCvc(),

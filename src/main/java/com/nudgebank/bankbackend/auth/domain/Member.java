@@ -25,16 +25,16 @@ public class Member {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   @Column(name = "member_id")
-  private Long id;
+  private Long memberId;
 
   @Column(name = "id", nullable = false, length = 100)
-  private String userId;
+  private String id;
 
   @Column(name = "name", nullable = false, length = 100)
   private String name;
 
   @Column(name = "password", nullable = false, length = 255)
-  private String passwordHash;
+  private String password;
 
   @Column(name = "birth")
   private LocalDate birth;

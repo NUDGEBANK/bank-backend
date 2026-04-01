@@ -40,14 +40,14 @@ public class AuthService {
     if (request == null || isBlank(request.userId()) || isBlank(request.password()) || isBlank(request.name())) {
       throw new IllegalArgumentException("MISSING_FIELDS");
     }
-    if (memberRepository.existsByUserId(request.userId())) {
+    if (memberRepository.existsById(request.userId())) {
       throw new IllegalArgumentException("DUPLICATE_USER_ID");
     }
 
     Member member = new Member();
-    member.setUserId(request.userId());
+    member.setId(request.userId());
     member.setName(request.name());
-    member.setPasswordHash(passwordEncoder.encode(request.password()));
+    member.setPassword(passwordEncoder.encode(request.password()));
     member.setBirth(request.birth());
     member.setCreatedAt(OffsetDateTime.now());
     member.setGender(request.gender());
@@ -60,11 +60,11 @@ public class AuthService {
       throw new IllegalArgumentException("MISSING_FIELDS");
     }
 
-    Optional<Member> member = memberRepository.findByUserId(request.userId());
+    Optional<Member> member = memberRepository.findById(request.userId());
     if (member.isEmpty()) {
       throw new IllegalArgumentException("INVALID_CREDENTIALS");
     }
-    if (!passwordEncoder.matches(request.password(), member.get().getPasswordHash())) {
+    if (!passwordEncoder.matches(request.password(), member.get().getPassword())) {
       throw new IllegalArgumentException("INVALID_CREDENTIALS");
     }
     return member.get();
@@ -72,15 +72,15 @@ public class AuthService {
 
   @Transactional
   public TokenPair issueTokens(Member member) {
-    refreshTokenRepository.deleteByUserId(member.getId());
+    refreshTokenRepository.deleteByMemberId(member.getMemberId());
 
     String rid = UUID.randomUUID().toString().replace("-", "");
-    String accessToken = jwtProvider.createAccessToken(member.getId());
-    String refreshToken = jwtProvider.createRefreshToken(member.getId(), rid);
+    String accessToken = jwtProvider.createAccessToken(member.getMemberId());
+    String refreshToken = jwtProvider.createRefreshToken(member.getMemberId(), rid);
 
     RefreshToken stored = new RefreshToken();
     stored.setRid(rid);
-    stored.setUserId(member.getId());
+    stored.setMemberId(member.getMemberId());
     stored.setToken(refreshToken);
     stored.setExpiresAt(Instant.now().plusSeconds(jwtProvider.getRefreshTtlSeconds()));
     refreshTokenRepository.save(stored);
@@ -108,7 +108,7 @@ public class AuthService {
   @Transactional
   public void deleteRefreshTokenByUserId(Long userId) {
     if (userId != null) {
-      refreshTokenRepository.deleteByUserId(userId);
+      refreshTokenRepository.deleteByMemberId(userId);
     }
   }
 

@@ -16,15 +16,15 @@ import lombok.Setter;
 @NoArgsConstructor
 public class RefreshToken {
   @Id
-  @Column(length = 64)
+  @Column(name = "rid", length = 64)
   private String rid;
 
-  @Column(nullable = false)
-  private Long userId;
+  @Column(name = "member_id", nullable = false)
+  private Long memberId;
 
-  @Column(nullable = false, length = 512)
+  @Column(name = "token", nullable = false, length = 512)
   private String token;
 
-  @Column(nullable = false)
+  @Column(name = "expires_at", nullable = false)
   private Instant expiresAt;
 }

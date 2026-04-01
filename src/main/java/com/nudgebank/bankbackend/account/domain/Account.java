@@ -13,31 +13,31 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "`account`")
+@Table(name = "account")
 @Getter
 @Setter
 @NoArgsConstructor
 public class Account {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
-  @Column(name = "`accountID`")
-  private Long id;
+  @Column(name = "account_id")
+  private Long accountId;
 
-  @Column(name = "`memberID`", nullable = false)
+  @Column(name = "member_id", nullable = false)
   private Long memberId;
 
-  @Column(name = "`accountName`", nullable = false, length = 100)
+  @Column(name = "account_name", nullable = false, length = 100)
   private String accountName;
 
-  @Column(name = "`accountNumber`", nullable = false, length = 30, unique = true)
+  @Column(name = "account_number", nullable = false, length = 30, unique = true)
   private String accountNumber;
 
-  @Column(name = "`balance`", nullable = false, precision = 15, scale = 2)
+  @Column(name = "balance", nullable = false, precision = 15, scale = 2)
   private BigDecimal balance;
 
-  @Column(name = "`openedAt`", nullable = false)
+  @Column(name = "opened_at", nullable = false)
   private OffsetDateTime openedAt;
 
-  @Column(name = "`protectedBalance`", nullable = false)
+  @Column(name = "protected_balance", nullable = false)
   private Long protectedBalance;
 }

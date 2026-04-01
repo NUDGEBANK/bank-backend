@@ -12,34 +12,34 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "`card`")
+@Table(name = "card")
 @Getter
 @Setter
 @NoArgsConstructor
 public class Card {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
-  @Column(name = "`cardID`")
-  private Long id;
+  @Column(name = "card_id")
+  private Long cardId;
 
-  @Column(name = "`accountID`", nullable = false)
+  @Column(name = "account_id", nullable = false)
   private Long accountId;
 
-  @Column(name = "`cardNumber`", nullable = false, length = 30, unique = true)
+  @Column(name = "card_number", nullable = false, length = 30, unique = true)
   private String cardNumber;
 
-  @Column(name = "`issuedAt`", nullable = false)
+  @Column(name = "issued_at", nullable = false)
   private OffsetDateTime issuedAt;
 
-  @Column(name = "`validThru`", nullable = false, length = 5)
+  @Column(name = "valid_thru", nullable = false, length = 5)
   private String validThru;
 
-  @Column(name = "`password`", nullable = false, length = 100)
+  @Column(name = "password", nullable = false, length = 100)
   private String password;
 
-  @Column(name = "`cvc`", nullable = false, length = 3)
+  @Column(name = "cvc", nullable = false, length = 3)
   private String cvc;
 
-  @Column(name = "`status`", nullable = false, length = 20)
+  @Column(name = "status", nullable = false, length = 20)
   private String status;
 }
