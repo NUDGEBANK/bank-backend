@@ -7,12 +7,14 @@ import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
 @Table(name = "chat_sessions")
 @Getter
 @Setter
+@NoArgsConstructor
 public class ChatSession {
 
     @Id
