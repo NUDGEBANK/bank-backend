@@ -28,9 +28,9 @@ public class OcrClient {
     private final RestClient restClient;
 
     public OcrClient(
-            @Value("${ocr.base-url:http://localhost:8000}") String ocrBaseUrl,
-            @Value("${ocr.connect-timeout-ms:5000}") int connectTimeoutMs,
-            @Value("${ocr.read-timeout-ms:120000}") int readTimeoutMs
+            @Value("${ocr.base-url}") String ocrBaseUrl,
+            @Value("${ocr.connect-timeout-ms}") int connectTimeoutMs,
+            @Value("${ocr.read-timeout-ms}") int readTimeoutMs
     ) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofMillis(connectTimeoutMs));
