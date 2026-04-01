@@ -3,11 +3,12 @@ package com.nudgebank.bankbackend.auth.service;
 import com.nudgebank.bankbackend.auth.dto.LoginRequest;
 import com.nudgebank.bankbackend.auth.dto.SignupRequest;
 import com.nudgebank.bankbackend.auth.domain.RefreshToken;
-import com.nudgebank.bankbackend.auth.domain.User;
+import com.nudgebank.bankbackend.auth.domain.Member;
 import com.nudgebank.bankbackend.auth.repository.RefreshTokenRepository;
-import com.nudgebank.bankbackend.auth.repository.UserRepository;
+import com.nudgebank.bankbackend.auth.repository.MemberRepository;
 import com.nudgebank.bankbackend.auth.security.JwtProvider;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -18,67 +19,68 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthService {
   public record TokenPair(String accessToken, String refreshToken, String rid, long accessTtlSeconds, long refreshTtlSeconds) {}
 
-  private final UserRepository userRepository;
+  private final MemberRepository memberRepository;
   private final RefreshTokenRepository refreshTokenRepository;
   private final PasswordEncoder passwordEncoder;
   private final JwtProvider jwtProvider;
   public AuthService(
-      UserRepository userRepository,
+      MemberRepository memberRepository,
       RefreshTokenRepository refreshTokenRepository,
       PasswordEncoder passwordEncoder,
       JwtProvider jwtProvider
   ) {
-    this.userRepository = userRepository;
+    this.memberRepository = memberRepository;
     this.refreshTokenRepository = refreshTokenRepository;
     this.passwordEncoder = passwordEncoder;
     this.jwtProvider = jwtProvider;
   }
 
   @Transactional
-  public User signup(SignupRequest request) {
+  public Member signup(SignupRequest request) {
     if (request == null || isBlank(request.userId()) || isBlank(request.password()) || isBlank(request.name())) {
       throw new IllegalArgumentException("MISSING_FIELDS");
     }
-    if (userRepository.existsByUserId(request.userId())) {
+    if (memberRepository.existsByUserId(request.userId())) {
       throw new IllegalArgumentException("DUPLICATE_USER_ID");
     }
 
-    User user = new User();
-    user.setUserId(request.userId());
-    user.setName(request.name());
-    user.setPasswordHash(passwordEncoder.encode(request.password()));
-    user.setBirth(request.birth());
-    user.setGender(request.gender());
+    Member member = new Member();
+    member.setUserId(request.userId());
+    member.setName(request.name());
+    member.setPasswordHash(passwordEncoder.encode(request.password()));
+    member.setBirth(request.birth());
+    member.setCreatedAt(OffsetDateTime.now());
+    member.setGender(request.gender());
 
-    return userRepository.save(user);
+    return memberRepository.save(member);
   }
 
-  public User login(LoginRequest request) {
+  public Member login(LoginRequest request) {
     if (request == null || isBlank(request.userId()) || isBlank(request.password())) {
       throw new IllegalArgumentException("MISSING_FIELDS");
     }
 
-    Optional<User> user = userRepository.findByUserId(request.userId());
-    if (user.isEmpty()) {
+    Optional<Member> member = memberRepository.findByUserId(request.userId());
+    if (member.isEmpty()) {
       throw new IllegalArgumentException("INVALID_CREDENTIALS");
     }
-    if (!passwordEncoder.matches(request.password(), user.get().getPasswordHash())) {
+    if (!passwordEncoder.matches(request.password(), member.get().getPasswordHash())) {
       throw new IllegalArgumentException("INVALID_CREDENTIALS");
     }
-    return user.get();
+    return member.get();
   }
 
   @Transactional
-  public TokenPair issueTokens(User user) {
-    refreshTokenRepository.deleteByUserId(user.getId());
+  public TokenPair issueTokens(Member member) {
+    refreshTokenRepository.deleteByUserId(member.getId());
 
     String rid = UUID.randomUUID().toString().replace("-", "");
-    String accessToken = jwtProvider.createAccessToken(user.getId());
-    String refreshToken = jwtProvider.createRefreshToken(user.getId(), rid);
+    String accessToken = jwtProvider.createAccessToken(member.getId());
+    String refreshToken = jwtProvider.createRefreshToken(member.getId(), rid);
 
     RefreshToken stored = new RefreshToken();
     stored.setRid(rid);
-    stored.setUserId(user.getId());
+    stored.setUserId(member.getId());
     stored.setToken(refreshToken);
     stored.setExpiresAt(Instant.now().plusSeconds(jwtProvider.getRefreshTtlSeconds()));
     refreshTokenRepository.save(stored);

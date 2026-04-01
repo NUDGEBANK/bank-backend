@@ -2,8 +2,8 @@ package com.nudgebank.bankbackend.card.service;
 
 import com.nudgebank.bankbackend.account.domain.Account;
 import com.nudgebank.bankbackend.account.repository.AccountRepository;
-import com.nudgebank.bankbackend.auth.entity.User;
-import com.nudgebank.bankbackend.auth.repository.UserRepository;
+import com.nudgebank.bankbackend.auth.domain.Member;
+import com.nudgebank.bankbackend.auth.repository.MemberRepository;
 import com.nudgebank.bankbackend.card.dto.CardIssueRequest;
 import com.nudgebank.bankbackend.card.dto.CardIssueResponse;
 import com.nudgebank.bankbackend.card.domain.Card;
@@ -22,19 +22,19 @@ public class CardIssueService {
   private static final DateTimeFormatter VALID_THRU_FORMATTER = DateTimeFormatter.ofPattern("MM/yy");
   private static final int MAX_NUMBER_RETRY = 100;
 
-  private final UserRepository userRepository;
+  private final MemberRepository memberRepository;
   private final AccountRepository accountRepository;
   private final CardRepository cardRepository;
   private final PasswordEncoder passwordEncoder;
   private final SecureRandom secureRandom = new SecureRandom();
 
   public CardIssueService(
-      UserRepository userRepository,
+      MemberRepository memberRepository,
       AccountRepository accountRepository,
       CardRepository cardRepository,
       PasswordEncoder passwordEncoder
   ) {
-    this.userRepository = userRepository;
+    this.memberRepository = memberRepository;
     this.accountRepository = accountRepository;
     this.cardRepository = cardRepository;
     this.passwordEncoder = passwordEncoder;
@@ -47,7 +47,7 @@ public class CardIssueService {
     }
     validateRequest(request);
 
-    User user = userRepository.findById(userId)
+    Member member = memberRepository.findById(userId)
         .orElseThrow(() -> new IllegalArgumentException("USER_NOT_FOUND"));
 
     if (accountRepository.findByMemberId(userId).isPresent()) {
@@ -58,7 +58,7 @@ public class CardIssueService {
 
     Account account = new Account();
     account.setMemberId(userId);
-    account.setAccountName(user.getName());
+    account.setAccountName(member.getName());
     account.setAccountNumber(generateUniqueAccountNumber());
     account.setBalance(BigDecimal.ZERO.setScale(2));
     account.setOpenedAt(now);
