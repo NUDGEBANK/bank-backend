@@ -42,7 +42,12 @@ public class CertificateVerificationService {
     }
 
     private boolean contains(String normalizedText, String expectedValue) {
-        return normalizedText.contains(normalize(expectedValue));
+        String normalizedExpectedValue = normalize(expectedValue);
+        if (normalizedExpectedValue.isBlank()) {
+            return false;
+        }
+
+        return normalizedText.contains(normalizedExpectedValue);
     }
 
     private String normalize(String value) {
