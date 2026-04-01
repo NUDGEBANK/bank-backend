@@ -28,7 +28,7 @@ public class ChatController {
         Map<String, Object> userInfo = userService.getUserInfo(userId);
 
         // 2. FastAPI 호출
-        String answer = chatbotService.ask(userId, message, userInfo);
+        String answer = chatbotService.ask(userId, message);
 
         return ResponseEntity.ok(answer);
     }
