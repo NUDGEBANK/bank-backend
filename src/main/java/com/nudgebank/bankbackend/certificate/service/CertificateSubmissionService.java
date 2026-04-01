@@ -1,6 +1,7 @@
 package com.nudgebank.bankbackend.certificate.service;
 
 import com.nudgebank.bankbackend.certificate.dto.CertificateSubmissionResponse;
+import com.nudgebank.bankbackend.certificate.dto.CertificateMatchResult;
 import com.nudgebank.bankbackend.certificate.domain.CertificateSubmission;
 import com.nudgebank.bankbackend.certificate.repository.CertificateSubmissionRepository;
 import com.nudgebank.bankbackend.ocr.client.OcrClient;
@@ -15,17 +16,18 @@ import java.time.OffsetDateTime;
 @Service
 public class CertificateSubmissionService {
 
-    private static final String VERIFICATION_STATUS_COMPLETED = "OCR_COMPLETED";
-
     private final CertificateSubmissionRepository certificateSubmissionRepository;
     private final OcrClient ocrClient;
+    private final CertificateVerificationService certificateVerificationService;
 
     public CertificateSubmissionService(
             CertificateSubmissionRepository certificateSubmissionRepository,
-            OcrClient ocrClient
+            OcrClient ocrClient,
+            CertificateVerificationService certificateVerificationService
     ) {
         this.certificateSubmissionRepository = certificateSubmissionRepository;
         this.ocrClient = ocrClient;
+        this.certificateVerificationService = certificateVerificationService;
     }
 
     @Transactional
@@ -39,6 +41,7 @@ public class CertificateSubmissionService {
 
         OcrExtractResponse ocrResponse = ocrClient.extract(file);
         OffsetDateTime submittedAt = OffsetDateTime.now();
+        CertificateMatchResult matchResult = certificateVerificationService.verify(certificateId, ocrResponse.extractedText());
 
         CertificateSubmission submission = CertificateSubmission.builder()
                 .memberId(memberId)
@@ -46,9 +49,9 @@ public class CertificateSubmissionService {
                 .certificateId(certificateId)
                 .fileUrl(file.getOriginalFilename())
                 .ocrText(ocrResponse.extractedText())
-                .verificationStatus(VERIFICATION_STATUS_COMPLETED)
+                .verificationStatus(matchResult.verificationStatus().name())
                 .submittedAt(submittedAt)
-                .verifiedAt(submittedAt)
+                .verifiedAt(matchResult.verifiedAt())
                 .build();
 
         CertificateSubmission savedSubmission = certificateSubmissionRepository.save(submission);
@@ -60,7 +63,7 @@ public class CertificateSubmissionService {
                 ocrResponse.extractedText(),
                 ocrResponse.lines(),
                 ocrResponse.lineCount(),
-                savedSubmission.getVerificationStatus(),
+                matchResult.verificationStatus().name(),
                 savedSubmission.getSubmittedAt()
         );
     }

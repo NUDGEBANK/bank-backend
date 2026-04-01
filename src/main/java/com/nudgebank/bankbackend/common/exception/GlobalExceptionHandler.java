@@ -1,5 +1,6 @@
 package com.nudgebank.bankbackend.common.exception;
 
+import com.nudgebank.bankbackend.certificate.exception.CertificateVerificationException;
 import com.nudgebank.bankbackend.ocr.exception.InvalidCertificateUploadException;
 import com.nudgebank.bankbackend.ocr.exception.OcrClientException;
 import org.springframework.http.HttpStatus;
@@ -27,6 +28,16 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
                 .body(new ErrorResponse(
                         HttpStatus.BAD_GATEWAY.value(),
+                        exception.getMessage(),
+                        OffsetDateTime.now()
+                ));
+    }
+
+    @ExceptionHandler(CertificateVerificationException.class)
+    public ResponseEntity<ErrorResponse> handleCertificateVerificationException(CertificateVerificationException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse(
+                        HttpStatus.BAD_REQUEST.value(),
                         exception.getMessage(),
                         OffsetDateTime.now()
                 ));

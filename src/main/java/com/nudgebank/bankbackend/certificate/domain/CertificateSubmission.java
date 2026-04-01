@@ -50,4 +50,9 @@ public class CertificateSubmission {
 
     @Column(name = "verified_at")
     private OffsetDateTime verifiedAt;
+
+    public void updateVerification(String verificationStatus, OffsetDateTime verifiedAt) {
+        this.verificationStatus = verificationStatus;
+        this.verifiedAt = verifiedAt;
+    }
 }
