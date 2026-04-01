@@ -1,7 +1,7 @@
 package com.nudgebank.bankbackend.chatbot.service;
 
-import com.nudgebank.bankbackend.auth.entity.User;
-import com.nudgebank.bankbackend.auth.repository.UserRepository;
+import com.nudgebank.bankbackend.auth.domain.Member;
+import com.nudgebank.bankbackend.auth.repository.MemberRepository;
 import java.util.HashMap;
 import java.util.Map;
 import org.springframework.stereotype.Service;
@@ -12,11 +12,11 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class UserService {
 
-    private final UserRepository userRepository;
+    private final MemberRepository memberRepository;
 
     public Map<String, Object> getUserInfo(String userId) {
 
-        User user = userRepository.findByUserId(userId)
+        Member user = memberRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         Map<String, Object> result = new HashMap<>();
