@@ -2,6 +2,8 @@ package com.nudgebank.bankbackend.certificate.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
@@ -11,26 +13,24 @@ import lombok.NoArgsConstructor;
 import java.time.OffsetDateTime;
 
 @Entity
-@Table(name = "certificate_master")
+@Table(name = "certificate_issuer_alias")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class CertificateMaster {
+public class CertificateIssuerAlias {
 
     @Id
-    @Column(name = "certificate_id")
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "alias_id")
+    private Long aliasId;
+
+    @Column(name = "certificate_id", nullable = false)
     private Long certificateId;
 
-    @Column(name = "certificate_name", length = 200)
-    private String certificateName;
+    @Column(name = "issuer_name", length = 200)
+    private String issuerName;
 
-    @Column(name = "certificate_code", length = 50)
-    private String certificateCode;
-
-    @Column(name = "certificate_name_en", length = 200)
-    private String certificateNameEn;
-
-    @Column(name = "certificate_category", length = 100)
-    private String certificateCategory;
+    @Column(name = "issuer_name_en", length = 200)
+    private String issuerNameEn;
 
     @Column(name = "is_active")
     private Boolean isActive;
