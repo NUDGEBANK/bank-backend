@@ -16,7 +16,7 @@ public class UserService {
 
     public Map<String, Object> getUserInfo(String userId) {
 
-        Member user = memberRepository.findById(userId)
+        Member user = memberRepository.findByLoginId(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         Map<String, Object> result = new HashMap<>();

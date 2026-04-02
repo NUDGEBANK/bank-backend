@@ -8,6 +8,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 @Entity
@@ -23,14 +24,11 @@ public class CertificateMaster {
     @Column(name = "certificate_name", length = 200)
     private String certificateName;
 
-    @Column(name = "certificate_code", length = 50)
-    private String certificateCode;
+    @Column(name = "issuer_name", length = 200)
+    private String issuerName;
 
-    @Column(name = "certificate_name_en", length = 200)
-    private String certificateNameEn;
-
-    @Column(name = "certificate_category", length = 100)
-    private String certificateCategory;
+    @Column(name = "rate_discount")
+    private BigDecimal rateDiscount;
 
     @Column(name = "is_active")
     private Boolean isActive;

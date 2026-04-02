@@ -36,29 +36,14 @@ public class CertificateSubmission {
     @Column(name = "certificate_id", nullable = false)
     private Long certificateId;
 
-    @Column(name = "matched_issuer_name", length = 200)
-    private String matchedIssuerName;
-
     @Column(name = "file_url", length = 500)
     private String fileUrl;
 
     @Column(name = "ocr_text", columnDefinition = "TEXT")
     private String ocrText;
 
-    @Column(name = "match_score", precision = 5, scale = 2)
-    private java.math.BigDecimal matchScore;
-
-    @Column(name = "detected_name", length = 100)
-    private String detectedName;
-
-    @Column(name = "name_match_yn")
-    private Boolean nameMatchYn;
-
     @Column(name = "verification_status", length = 30)
     private String verificationStatus;
-
-    @Column(name = "review_note", length = 500)
-    private String reviewNote;
 
     @Column(name = "submitted_at")
     private OffsetDateTime submittedAt;

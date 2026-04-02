@@ -11,6 +11,7 @@ public record CertificateSubmissionResponse(
         List<String> lines,
         int lineCount,
         String verificationStatus,
+        String failureReason,
         OffsetDateTime submittedAt
 ) {
 }
