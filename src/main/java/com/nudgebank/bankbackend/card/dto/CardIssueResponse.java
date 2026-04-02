@@ -11,7 +11,7 @@ public record CardIssueResponse(
     BigDecimal balance,
     Long cardId,
     String cardNumber,
-    String validThru,
+    String expiredYm,
     String cvc,
     String status
 ) {

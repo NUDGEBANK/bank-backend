@@ -38,6 +38,6 @@ public class Account {
   @Column(name = "opened_at", nullable = false)
   private OffsetDateTime openedAt;
 
-  @Column(name = "protected_balance", nullable = false)
-  private Long protectedBalance;
+  @Column(name = "protected_balance", nullable = false, precision = 15, scale = 2)
+  private BigDecimal protectedBalance;
 }

@@ -28,18 +28,18 @@ public class Card {
   @Column(name = "card_number", nullable = false, length = 30, unique = true)
   private String cardNumber;
 
-  @Column(name = "issued_at", nullable = false)
-  private OffsetDateTime issuedAt;
+  @Column(name = "created_at")
+  private OffsetDateTime createdAt;
 
-  @Column(name = "valid_thru", nullable = false, length = 5)
-  private String validThru;
+  @Column(name = "expired_ym", length = 5)
+  private String expiredYm;
 
-  @Column(name = "password", nullable = false, length = 100)
+  @Column(name = "password", length = 100)
   private String password;
 
-  @Column(name = "cvc", nullable = false, length = 3)
+  @Column(name = "cvc", length = 3)
   private String cvc;
 
-  @Column(name = "status", nullable = false, length = 20)
+  @Column(name = "status", length = 20)
   private String status;
 }
