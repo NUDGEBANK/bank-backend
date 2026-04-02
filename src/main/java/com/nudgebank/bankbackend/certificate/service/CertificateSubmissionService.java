@@ -3,7 +3,6 @@ package com.nudgebank.bankbackend.certificate.service;
 import com.nudgebank.bankbackend.auth.domain.Member;
 import com.nudgebank.bankbackend.auth.repository.MemberRepository;
 import com.nudgebank.bankbackend.certificate.domain.CertificateSubmission;
-import com.nudgebank.bankbackend.certificate.domain.CertificateVerificationStatus;
 import com.nudgebank.bankbackend.certificate.dto.CertificateMatchResult;
 import com.nudgebank.bankbackend.certificate.dto.CertificateSubmissionResponse;
 import com.nudgebank.bankbackend.certificate.repository.CertificateSubmissionRepository;
@@ -14,7 +13,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 @Service
@@ -45,32 +43,24 @@ public class CertificateSubmissionService {
             MultipartFile file
     ) {
         validateRequest(memberId, loanId, certificateId, file);
-        validateDuplicateSubmission(memberId, certificateId);
-
-        Member member = memberRepository.findById(memberId)
-                .orElseThrow(() -> new InvalidCertificateUploadException("Member not found"));
 
         OcrExtractResponse ocrResponse = ocrClient.extract(file);
         OffsetDateTime submittedAt = OffsetDateTime.now();
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new InvalidCertificateUploadException("Member not found"));
         CertificateMatchResult matchResult = certificateVerificationService.verify(
-                member,
                 certificateId,
                 ocrResponse.extractedText(),
-                ocrResponse.lines()
+                member
         );
 
         CertificateSubmission submission = CertificateSubmission.builder()
                 .memberId(memberId)
                 .loanApplicationId(loanId)
                 .certificateId(certificateId)
-                .matchedIssuerName(matchResult.matchedIssuerName())
                 .fileUrl(file.getOriginalFilename())
                 .ocrText(ocrResponse.extractedText())
-                .matchScore(defaultScore(matchResult.matchScore()))
-                .detectedName(matchResult.detectedName())
-                .nameMatchYn(matchResult.nameMatched())
                 .verificationStatus(matchResult.verificationStatus().name())
-                .reviewNote(matchResult.reviewNote())
                 .submittedAt(submittedAt)
                 .verifiedAt(matchResult.verifiedAt())
                 .build();
@@ -88,20 +78,6 @@ public class CertificateSubmissionService {
                 matchResult.failureReason(),
                 savedSubmission.getSubmittedAt()
         );
-    }
-
-    private void validateDuplicateSubmission(Long memberId, Long certificateId) {
-        if (certificateSubmissionRepository.existsByMemberIdAndCertificateIdAndVerificationStatus(
-                memberId,
-                certificateId,
-                CertificateVerificationStatus.VERIFIED.name()
-        )) {
-            throw new InvalidCertificateUploadException("Certificate already verified for this member");
-        }
-    }
-
-    private BigDecimal defaultScore(BigDecimal score) {
-        return score == null ? BigDecimal.ZERO : score;
     }
 
     private void validateRequest(
