@@ -12,6 +12,7 @@ public record CertificateMatchResult(
         String matchedIssuerName,
         String detectedName,
         boolean nameMatched,
-        String reviewNote
+        String reviewNote,
+        String failureReason
 ) {
 }

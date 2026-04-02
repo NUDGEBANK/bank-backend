@@ -12,6 +12,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 @Entity
@@ -46,7 +47,7 @@ public class CertificateSubmission {
     private String ocrText;
 
     @Column(name = "match_score", precision = 5, scale = 2)
-    private java.math.BigDecimal matchScore;
+    private BigDecimal matchScore;
 
     @Column(name = "detected_name", length = 100)
     private String detectedName;

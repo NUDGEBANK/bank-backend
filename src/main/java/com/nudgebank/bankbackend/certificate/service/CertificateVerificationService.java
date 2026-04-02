@@ -8,6 +8,8 @@ import com.nudgebank.bankbackend.certificate.dto.CertificateMatchResult;
 import com.nudgebank.bankbackend.certificate.exception.CertificateVerificationException;
 import com.nudgebank.bankbackend.certificate.repository.CertificateIssuerAliasRepository;
 import com.nudgebank.bankbackend.certificate.repository.CertificateMasterRepository;
+import org.springframework.stereotype.Service;
+
 import java.math.BigDecimal;
 import java.text.Normalizer;
 import java.time.OffsetDateTime;
@@ -15,16 +17,15 @@ import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import org.springframework.stereotype.Service;
 
 @Service
 public class CertificateVerificationService {
 
     private static final Pattern NAME_PATTERN = Pattern.compile(
-            "(?:성\\s*명|이\\s*름)\\s*[:：]?\\s*([가-힣]{2,10})"
+            "(?:성\\s*명|이\\s*름)\\s*[:：`\"' ]*\\s*([가-힣]{2,10})"
     );
     private static final Pattern NAME_FALLBACK_PATTERN = Pattern.compile(
-            "(?:성\\s*명|이\\s*름)\\s*[:：]?\\s*([가-힣\\s]{2,20})"
+            "(?:성\\s*명|이\\s*름)\\s*[:：`\"' ]*\\s*([가-힣\\s]{2,20})"
     );
 
     private static final String[] PASS_KEYWORDS = {
@@ -66,6 +67,19 @@ public class CertificateVerificationService {
         CertificateMaster certificateMaster = certificateMasterRepository.findByCertificateIdAndIsActiveTrue(certificateId)
                 .orElseThrow(() -> new CertificateVerificationException("Active certificate master not found"));
 
+        if (extractedText == null || extractedText.isBlank()) {
+            return new CertificateMatchResult(
+                    CertificateVerificationStatus.VERIFICATION_FAILED,
+                    null,
+                    BigDecimal.ZERO,
+                    null,
+                    null,
+                    false,
+                    "OCR_TEXT_NOT_DETECTED",
+                    "OCR_TEXT_NOT_DETECTED"
+            );
+        }
+
         String normalizedText = normalize(extractedText);
         List<CertificateIssuerAlias> issuerAliases =
                 certificateIssuerAliasRepository.findAllByCertificateIdAndIsActiveTrue(certificateId);
@@ -104,9 +118,18 @@ public class CertificateVerificationService {
                     matchedIssuerName,
                     detectedName,
                     true,
-                    "VERIFIED"
+                    "VERIFIED",
+                    null
             );
         }
+
+        String failureReason = buildFailureReason(
+                nameMatched,
+                certificateNameMatched,
+                issuerMatched,
+                passKeywordMatched,
+                rejectionKeywordMatched
+        );
 
         return new CertificateMatchResult(
                 CertificateVerificationStatus.VERIFICATION_FAILED,
@@ -115,17 +138,12 @@ public class CertificateVerificationService {
                 matchedIssuerName,
                 detectedName,
                 nameMatched,
-                buildReviewNote(
-                        nameMatched,
-                        certificateNameMatched,
-                        issuerMatched,
-                        passKeywordMatched,
-                        rejectionKeywordMatched
-                )
+                failureReason,
+                failureReason
         );
     }
 
-    private String buildReviewNote(
+    private String buildFailureReason(
             boolean nameMatched,
             boolean certificateNameMatched,
             boolean issuerMatched,
@@ -139,7 +157,7 @@ public class CertificateVerificationService {
             return "CERTIFICATE_NAME_MISMATCH";
         }
         if (!issuerMatched) {
-            return "ISSUER_MISMATCH";
+            return "ISSUER_NAME_MISMATCH";
         }
         if (!passKeywordMatched) {
             return "PASS_KEYWORD_NOT_FOUND";
@@ -177,14 +195,12 @@ public class CertificateVerificationService {
         if (contains(normalizedText, memberName)) {
             return true;
         }
-
         if (detectedName == null || detectedName.isBlank()) {
             return false;
         }
 
         String normalizedMemberName = normalize(memberName);
         String normalizedDetectedName = normalize(detectedName);
-
         if (normalizedMemberName.equals(normalizedDetectedName)) {
             return true;
         }

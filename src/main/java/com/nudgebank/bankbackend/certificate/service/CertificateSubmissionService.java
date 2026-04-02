@@ -2,10 +2,10 @@ package com.nudgebank.bankbackend.certificate.service;
 
 import com.nudgebank.bankbackend.auth.domain.Member;
 import com.nudgebank.bankbackend.auth.repository.MemberRepository;
-import com.nudgebank.bankbackend.certificate.domain.CertificateVerificationStatus;
-import com.nudgebank.bankbackend.certificate.dto.CertificateSubmissionResponse;
-import com.nudgebank.bankbackend.certificate.dto.CertificateMatchResult;
 import com.nudgebank.bankbackend.certificate.domain.CertificateSubmission;
+import com.nudgebank.bankbackend.certificate.domain.CertificateVerificationStatus;
+import com.nudgebank.bankbackend.certificate.dto.CertificateMatchResult;
+import com.nudgebank.bankbackend.certificate.dto.CertificateSubmissionResponse;
 import com.nudgebank.bankbackend.certificate.repository.CertificateSubmissionRepository;
 import com.nudgebank.bankbackend.ocr.client.OcrClient;
 import com.nudgebank.bankbackend.ocr.dto.OcrExtractResponse;
@@ -85,6 +85,7 @@ public class CertificateSubmissionService {
                 ocrResponse.lines(),
                 ocrResponse.lineCount(),
                 matchResult.verificationStatus().name(),
+                matchResult.failureReason(),
                 savedSubmission.getSubmittedAt()
         );
     }
