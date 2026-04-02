@@ -11,6 +11,9 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,21 +21,25 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AuthService {
   public record TokenPair(String accessToken, String refreshToken, String rid, long accessTtlSeconds, long refreshTtlSeconds) {}
+  private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
   private final MemberRepository memberRepository;
   private final RefreshTokenRepository refreshTokenRepository;
   private final PasswordEncoder passwordEncoder;
   private final JwtProvider jwtProvider;
+  private final JdbcTemplate jdbcTemplate;
   public AuthService(
       MemberRepository memberRepository,
       RefreshTokenRepository refreshTokenRepository,
       PasswordEncoder passwordEncoder,
-      JwtProvider jwtProvider
+      JwtProvider jwtProvider,
+      JdbcTemplate jdbcTemplate
   ) {
     this.memberRepository = memberRepository;
     this.refreshTokenRepository = refreshTokenRepository;
     this.passwordEncoder = passwordEncoder;
     this.jwtProvider = jwtProvider;
+    this.jdbcTemplate = jdbcTemplate;
   }
 
   @Transactional
@@ -40,7 +47,7 @@ public class AuthService {
     if (request == null || isBlank(request.userId()) || isBlank(request.password()) || isBlank(request.name())) {
       throw new IllegalArgumentException("MISSING_FIELDS");
     }
-    if (memberRepository.existsById(request.userId())) {
+    if (memberRepository.existsByLoginId(request.userId())) {
       throw new IllegalArgumentException("DUPLICATE_USER_ID");
     }
 
@@ -60,7 +67,7 @@ public class AuthService {
       throw new IllegalArgumentException("MISSING_FIELDS");
     }
 
-    Optional<Member> member = memberRepository.findById(request.userId());
+    Optional<Member> member = memberRepository.findByLoginId(request.userId());
     if (member.isEmpty()) {
       throw new IllegalArgumentException("INVALID_CREDENTIALS");
     }
@@ -70,20 +77,24 @@ public class AuthService {
     return member.get();
   }
 
-  @Transactional
   public TokenPair issueTokens(Member member) {
-    refreshTokenRepository.deleteByMemberId(member.getMemberId());
-
     String rid = UUID.randomUUID().toString().replace("-", "");
     String accessToken = jwtProvider.createAccessToken(member.getMemberId());
     String refreshToken = jwtProvider.createRefreshToken(member.getMemberId(), rid);
 
-    RefreshToken stored = new RefreshToken();
-    stored.setRid(rid);
-    stored.setMemberId(member.getMemberId());
-    stored.setToken(refreshToken);
-    stored.setExpiresAt(Instant.now().plusSeconds(jwtProvider.getRefreshTtlSeconds()));
-    refreshTokenRepository.save(stored);
+    try {
+      String memberColumn = resolveColumnName("refresh_tokens", "member_id", "memberid");
+      jdbcTemplate.update("delete from refresh_tokens where " + memberColumn + " = ?", member.getMemberId());
+      jdbcTemplate.update(
+          "insert into refresh_tokens (rid, " + memberColumn + ", token, expires_at) values (?, ?, ?, ?)",
+          rid,
+          member.getMemberId(),
+          refreshToken,
+          Instant.now().plusSeconds(jwtProvider.getRefreshTtlSeconds())
+      );
+    } catch (RuntimeException ex) {
+      log.warn("Refresh token persistence failed for memberId={}", member.getMemberId(), ex);
+    }
 
     return new TokenPair(
         accessToken,
@@ -114,6 +125,25 @@ public class AuthService {
 
   private boolean isBlank(String value) {
     return value == null || value.isBlank();
+  }
+
+  private String resolveColumnName(String tableName, String preferred, String fallback) {
+    Integer preferredCount = jdbcTemplate.queryForObject(
+        """
+        select count(*)
+        from information_schema.columns
+        where table_schema = 'public' and table_name = ? and column_name = ?
+        """,
+        Integer.class,
+        tableName,
+        preferred
+    );
+
+    if (preferredCount != null && preferredCount > 0) {
+      return preferred;
+    }
+
+    return fallback;
   }
 
 }
