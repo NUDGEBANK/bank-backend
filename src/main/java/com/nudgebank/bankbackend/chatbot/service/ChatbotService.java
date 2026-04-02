@@ -12,8 +12,12 @@ import org.springframework.web.reactive.function.client.WebClient;
 public class ChatbotService {
 
     private final WebClient webClient;
+    private final UserService userService;
 
-    public String ask(String userId, String message, Map<String, Object> userInfo) {
+    public String ask(String userId, String message) {
+
+        // 🔥 DB에서 유저 정보 조회
+        Map<String, Object> userInfo = userService.getUserInfo(userId);
 
         ChatRequestDto req = new ChatRequestDto();
         req.setUserId(userId);
