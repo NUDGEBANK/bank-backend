@@ -10,6 +10,8 @@ import java.time.OffsetDateTime;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "loan_product_documents")
@@ -26,6 +28,9 @@ public class LoanProductDocument {
     @Column(name = "loan_product_id", nullable = false)
     private Long loanProductId;
 
+    @Column(name = "doc_name")
+    private String docName;
+
     @Column(name = "chunk_index")
     private Integer chunkIndex;
 
@@ -34,6 +39,7 @@ public class LoanProductDocument {
 
     // pgvector
     @Column(name = "embedding", columnDefinition = "vector")
+    @JdbcTypeCode(SqlTypes.VECTOR)
     private float[] embedding;
 
     @Column(name = "created_at")
