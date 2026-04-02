@@ -62,15 +62,15 @@ public class CardIssueService {
     account.setAccountNumber(generateUniqueAccountNumber());
     account.setBalance(BigDecimal.ZERO.setScale(2));
     account.setOpenedAt(now);
-    account.setProtectedBalance(0L);
+    account.setProtectedBalance(BigDecimal.ZERO.setScale(2));
     Long savedAccountId = createAccount(account);
     account.setAccountId(savedAccountId);
 
     Card card = new Card();
     card.setAccountId(account.getAccountId());
     card.setCardNumber(generateUniqueCardNumber());
-    card.setIssuedAt(now);
-    card.setValidThru(YearMonth.now().plusYears(5).format(VALID_THRU_FORMATTER));
+    card.setCreatedAt(now);
+    card.setExpiredYm(YearMonth.now().plusYears(5).format(VALID_THRU_FORMATTER));
     card.setPassword(passwordEncoder.encode(request.cardPassword()));
     card.setCvc(generateFixedDigits(3));
     card.setStatus("ACTIVE");
@@ -86,7 +86,7 @@ public class CardIssueService {
         account.getBalance(),
         card.getCardId(),
         card.getCardNumber(),
-        card.getValidThru(),
+        card.getExpiredYm(),
         card.getCvc(),
         card.getStatus()
     );
@@ -162,15 +162,15 @@ public class CardIssueService {
     String accountColumn = resolveColumnName("card", "account_id", "accountid");
     return jdbcTemplate.queryForObject(
         """
-        insert into card (%s, card_number, issued_at, valid_thru, password, cvc, status)
+        insert into card (%s, card_number, created_at, expired_ym, password, cvc, status)
         values (?, ?, ?, ?, ?, ?, ?)
         returning card_id
         """.formatted(accountColumn),
         Long.class,
         card.getAccountId(),
         card.getCardNumber(),
-        card.getIssuedAt(),
-        card.getValidThru(),
+        card.getCreatedAt(),
+        card.getExpiredYm(),
         card.getPassword(),
         card.getCvc(),
         card.getStatus()

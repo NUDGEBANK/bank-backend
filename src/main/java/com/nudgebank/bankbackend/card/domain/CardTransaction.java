@@ -32,7 +32,7 @@ public class CardTransaction {
   @JoinColumn(name = "market_id", nullable = false)
   private Market market;
 
-  @Column(name = "qr_id", length = 100)
+  @Column(name = "qr_id", nullable = false, length = 100)
   private String qrId;
 
   @ManyToOne(fetch = FetchType.LAZY)
