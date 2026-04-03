@@ -9,13 +9,12 @@ import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.AccessLevel;
 
 @Entity
 @Table(name = "card")
 @Getter
-@Setter
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Card {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -42,4 +41,36 @@ public class Card {
 
   @Column(name = "status", length = 20)
   private String status;
+
+  private Card(
+      Long cardId,
+      Long accountId,
+      String cardNumber,
+      OffsetDateTime createdAt,
+      String expiredYm,
+      String password,
+      String cvc,
+      String status
+  ) {
+    this.cardId = cardId;
+    this.accountId = accountId;
+    this.cardNumber = cardNumber;
+    this.createdAt = createdAt;
+    this.expiredYm = expiredYm;
+    this.password = password;
+    this.cvc = cvc;
+    this.status = status;
+  }
+
+  public static Card create(
+      Long accountId,
+      String cardNumber,
+      OffsetDateTime createdAt,
+      String expiredYm,
+      String password,
+      String cvc,
+      String status
+  ) {
+    return new Card(null, accountId, cardNumber, createdAt, expiredYm, password, cvc, status);
+  }
 }

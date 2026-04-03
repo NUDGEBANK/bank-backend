@@ -7,13 +7,12 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.AccessLevel;
 
 @Entity
 @Table(name = "refresh_tokens")
 @Getter
-@Setter
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class RefreshToken {
   @Id
   @Column(name = "rid", length = 64)
@@ -27,4 +26,15 @@ public class RefreshToken {
 
   @Column(name = "expires_at", nullable = false)
   private Instant expiresAt;
+
+  private RefreshToken(String rid, Long memberId, String token, Instant expiresAt) {
+    this.rid = rid;
+    this.memberId = memberId;
+    this.token = token;
+    this.expiresAt = expiresAt;
+  }
+
+  public static RefreshToken create(String rid, Long memberId, String token, Instant expiresAt) {
+    return new RefreshToken(rid, memberId, token, expiresAt);
+  }
 }

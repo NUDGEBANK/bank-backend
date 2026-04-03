@@ -10,13 +10,12 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.AccessLevel;
 
 @Entity
 @Table(name = "account")
 @Getter
-@Setter
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Account {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -40,4 +39,41 @@ public class Account {
 
   @Column(name = "protected_balance", nullable = false, precision = 15, scale = 2)
   private BigDecimal protectedBalance;
+
+  private Account(
+      Long accountId,
+      Long memberId,
+      String accountName,
+      String accountNumber,
+      BigDecimal balance,
+      OffsetDateTime openedAt,
+      BigDecimal protectedBalance
+  ) {
+    this.accountId = accountId;
+    this.memberId = memberId;
+    this.accountName = accountName;
+    this.accountNumber = accountNumber;
+    this.balance = balance;
+    this.openedAt = openedAt;
+    this.protectedBalance = protectedBalance;
+  }
+
+  public static Account create(
+      Long memberId,
+      String accountName,
+      String accountNumber,
+      BigDecimal balance,
+      OffsetDateTime openedAt,
+      BigDecimal protectedBalance
+  ) {
+    return new Account(
+        null,
+        memberId,
+        accountName,
+        accountNumber,
+        balance,
+        openedAt,
+        protectedBalance
+    );
+  }
 }

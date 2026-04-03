@@ -11,7 +11,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.AccessLevel;
 
 @Entity
 @Table(
@@ -19,8 +19,7 @@ import lombok.Setter;
     uniqueConstraints = @UniqueConstraint(columnNames = "id")
 )
 @Getter
-@Setter
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Member {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -44,4 +43,33 @@ public class Member {
 
   @Column(name = "gender", length = 10)
   private String gender;
+
+  private Member(
+      Long memberId,
+      String id,
+      String name,
+      String password,
+      LocalDate birth,
+      OffsetDateTime createdAt,
+      String gender
+  ) {
+    this.memberId = memberId;
+    this.id = id;
+    this.name = name;
+    this.password = password;
+    this.birth = birth;
+    this.createdAt = createdAt;
+    this.gender = gender;
+  }
+
+  public static Member create(
+      String id,
+      String name,
+      String password,
+      LocalDate birth,
+      OffsetDateTime createdAt,
+      String gender
+  ) {
+    return new Member(null, id, name, password, birth, createdAt, gender);
+  }
 }
