@@ -37,7 +37,7 @@ public class AuthController {
   public ResponseEntity<AuthResponse> signup(@RequestBody SignupRequest request, HttpServletResponse res) {
     try {
       Member member = authService.signup(request);
-      AuthService.TokenPair tokens = authService.issueTokens(member);
+      AuthService.TokenPair tokens = authService.issueTokens(member.getMemberId());
       setAuthCookies(res, tokens);
       return ResponseEntity.ok(new AuthResponse(true, "OK"));
     } catch (IllegalArgumentException ex) {
@@ -49,7 +49,7 @@ public class AuthController {
   public ResponseEntity<AuthResponse> login(@RequestBody LoginRequest request, HttpServletResponse res) {
     try {
       Member member = authService.login(request);
-      AuthService.TokenPair tokens = authService.issueTokens(member);
+      AuthService.TokenPair tokens = authService.issueTokens(member.getMemberId());
       setAuthCookies(res, tokens);
       return ResponseEntity.ok(new AuthResponse(true, "OK"));
     } catch (IllegalArgumentException ex) {
@@ -89,11 +89,8 @@ public class AuthController {
     }
 
     Long userId = Long.parseLong(claims.getSubject());
-    Member member = new Member();
-    member.setMemberId(userId);
-
     authService.deleteRefreshTokenByRid(rid);
-    AuthService.TokenPair tokens = authService.issueTokens(member);
+    AuthService.TokenPair tokens = authService.issueTokens(userId);
     setAuthCookies(res, tokens);
     return ResponseEntity.ok(new AuthResponse(true, "OK"));
   }

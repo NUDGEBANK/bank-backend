@@ -13,7 +13,6 @@ import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,21 +26,18 @@ public class CardIssueService {
   private final AccountRepository accountRepository;
   private final CardRepository cardRepository;
   private final PasswordEncoder passwordEncoder;
-  private final JdbcTemplate jdbcTemplate;
   private final SecureRandom secureRandom = new SecureRandom();
 
   public CardIssueService(
       MemberRepository memberRepository,
       AccountRepository accountRepository,
       CardRepository cardRepository,
-      PasswordEncoder passwordEncoder,
-      JdbcTemplate jdbcTemplate
+      PasswordEncoder passwordEncoder
   ) {
     this.memberRepository = memberRepository;
     this.accountRepository = accountRepository;
     this.cardRepository = cardRepository;
     this.passwordEncoder = passwordEncoder;
-    this.jdbcTemplate = jdbcTemplate;
   }
 
   @Transactional
@@ -56,26 +52,28 @@ public class CardIssueService {
 
     OffsetDateTime now = OffsetDateTime.now();
 
-    Account account = new Account();
-    account.setMemberId(userId);
-    account.setAccountName(member.getName());
-    account.setAccountNumber(generateUniqueAccountNumber());
-    account.setBalance(BigDecimal.ZERO.setScale(2));
-    account.setOpenedAt(now);
-    account.setProtectedBalance(BigDecimal.ZERO.setScale(2));
-    Long savedAccountId = createAccount(account);
-    account.setAccountId(savedAccountId);
+    Account account = accountRepository.save(
+        Account.create(
+            userId,
+            member.getName(),
+            generateUniqueAccountNumber(),
+            BigDecimal.ZERO.setScale(2),
+            now,
+            BigDecimal.ZERO.setScale(2)
+        )
+    );
 
-    Card card = new Card();
-    card.setAccountId(account.getAccountId());
-    card.setCardNumber(generateUniqueCardNumber());
-    card.setCreatedAt(now);
-    card.setExpiredYm(YearMonth.now().plusYears(5).format(VALID_THRU_FORMATTER));
-    card.setPassword(passwordEncoder.encode(request.cardPassword()));
-    card.setCvc(generateFixedDigits(3));
-    card.setStatus("ACTIVE");
-    Long savedCardId = createCard(card);
-    card.setCardId(savedCardId);
+    Card card = cardRepository.save(
+        Card.create(
+            account.getAccountId(),
+            generateUniqueCardNumber(),
+            now,
+            YearMonth.now().plusYears(5).format(VALID_THRU_FORMATTER),
+            passwordEncoder.encode(request.cardPassword()),
+            generateFixedDigits(3),
+            "ACTIVE"
+        )
+    );
 
     return new CardIssueResponse(
         true,
@@ -138,61 +136,5 @@ public class CardIssueService {
 
   private boolean isBlank(String value) {
     return value == null || value.isBlank();
-  }
-
-  private Long createAccount(Account account) {
-    String memberColumn = resolveColumnName("account", "member_id", "memberid");
-    return jdbcTemplate.queryForObject(
-        """
-        insert into account (%s, account_name, account_number, balance, opened_at, protected_balance)
-        values (?, ?, ?, ?, ?, ?)
-        returning account_id
-        """.formatted(memberColumn),
-        Long.class,
-        account.getMemberId(),
-        account.getAccountName(),
-        account.getAccountNumber(),
-        account.getBalance(),
-        account.getOpenedAt(),
-        account.getProtectedBalance()
-    );
-  }
-
-  private Long createCard(Card card) {
-    String accountColumn = resolveColumnName("card", "account_id", "accountid");
-    return jdbcTemplate.queryForObject(
-        """
-        insert into card (%s, card_number, created_at, expired_ym, password, cvc, status)
-        values (?, ?, ?, ?, ?, ?, ?)
-        returning card_id
-        """.formatted(accountColumn),
-        Long.class,
-        card.getAccountId(),
-        card.getCardNumber(),
-        card.getCreatedAt(),
-        card.getExpiredYm(),
-        card.getPassword(),
-        card.getCvc(),
-        card.getStatus()
-    );
-  }
-
-  private String resolveColumnName(String tableName, String preferred, String fallback) {
-    Integer preferredCount = jdbcTemplate.queryForObject(
-        """
-        select count(*)
-        from information_schema.columns
-        where table_schema = 'public' and table_name = ? and column_name = ?
-        """,
-        Integer.class,
-        tableName,
-        preferred
-    );
-
-    if (preferredCount != null && preferredCount > 0) {
-      return preferred;
-    }
-
-    return fallback;
   }
 }

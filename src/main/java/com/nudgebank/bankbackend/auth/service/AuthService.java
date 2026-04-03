@@ -11,7 +11,6 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -27,19 +26,16 @@ public class AuthService {
   private final RefreshTokenRepository refreshTokenRepository;
   private final PasswordEncoder passwordEncoder;
   private final JwtProvider jwtProvider;
-  private final JdbcTemplate jdbcTemplate;
   public AuthService(
       MemberRepository memberRepository,
       RefreshTokenRepository refreshTokenRepository,
       PasswordEncoder passwordEncoder,
-      JwtProvider jwtProvider,
-      JdbcTemplate jdbcTemplate
+      JwtProvider jwtProvider
   ) {
     this.memberRepository = memberRepository;
     this.refreshTokenRepository = refreshTokenRepository;
     this.passwordEncoder = passwordEncoder;
     this.jwtProvider = jwtProvider;
-    this.jdbcTemplate = jdbcTemplate;
   }
 
   @Transactional
@@ -51,15 +47,16 @@ public class AuthService {
       throw new IllegalArgumentException("DUPLICATE_USER_ID");
     }
 
-    Member member = new Member();
-    member.setId(request.userId());
-    member.setName(request.name());
-    member.setPassword(passwordEncoder.encode(request.password()));
-    member.setBirth(request.birth());
-    member.setCreatedAt(OffsetDateTime.now());
-    member.setGender(request.gender());
-
-    return memberRepository.save(member);
+    return memberRepository.save(
+        Member.create(
+            request.userId(),
+            request.name(),
+            passwordEncoder.encode(request.password()),
+            request.birth(),
+            OffsetDateTime.now(),
+            request.gender()
+        )
+    );
   }
 
   public Member login(LoginRequest request) {
@@ -77,23 +74,23 @@ public class AuthService {
     return member.get();
   }
 
-  public TokenPair issueTokens(Member member) {
+  public TokenPair issueTokens(Long memberId) {
     String rid = UUID.randomUUID().toString().replace("-", "");
-    String accessToken = jwtProvider.createAccessToken(member.getMemberId());
-    String refreshToken = jwtProvider.createRefreshToken(member.getMemberId(), rid);
+    String accessToken = jwtProvider.createAccessToken(memberId);
+    String refreshToken = jwtProvider.createRefreshToken(memberId, rid);
 
     try {
-      String memberColumn = resolveColumnName("refresh_tokens", "member_id", "memberid");
-      jdbcTemplate.update("delete from refresh_tokens where " + memberColumn + " = ?", member.getMemberId());
-      jdbcTemplate.update(
-          "insert into refresh_tokens (rid, " + memberColumn + ", token, expires_at) values (?, ?, ?, ?)",
-          rid,
-          member.getMemberId(),
-          refreshToken,
-          Instant.now().plusSeconds(jwtProvider.getRefreshTtlSeconds())
+      refreshTokenRepository.deleteByMemberId(memberId);
+      refreshTokenRepository.save(
+          RefreshToken.create(
+              rid,
+              memberId,
+              refreshToken,
+              Instant.now().plusSeconds(jwtProvider.getRefreshTtlSeconds())
+          )
       );
     } catch (RuntimeException ex) {
-      log.warn("Refresh token persistence failed for memberId={}", member.getMemberId(), ex);
+      log.warn("Refresh token persistence failed for memberId={}", memberId, ex);
     }
 
     return new TokenPair(
@@ -126,24 +123,4 @@ public class AuthService {
   private boolean isBlank(String value) {
     return value == null || value.isBlank();
   }
-
-  private String resolveColumnName(String tableName, String preferred, String fallback) {
-    Integer preferredCount = jdbcTemplate.queryForObject(
-        """
-        select count(*)
-        from information_schema.columns
-        where table_schema = 'public' and table_name = ? and column_name = ?
-        """,
-        Integer.class,
-        tableName,
-        preferred
-    );
-
-    if (preferredCount != null && preferredCount > 0) {
-      return preferred;
-    }
-
-    return fallback;
-  }
-
 }
