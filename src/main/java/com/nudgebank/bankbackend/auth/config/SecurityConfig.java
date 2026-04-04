@@ -2,7 +2,6 @@ package com.nudgebank.bankbackend.auth.config;
 
 import com.nudgebank.bankbackend.auth.security.JwtAuthFilter;
 import com.nudgebank.bankbackend.auth.security.JwtProvider;
-import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -17,6 +16,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.List;
 @Configuration
 @EnableMethodSecurity
 @EnableWebSecurity
@@ -37,6 +37,8 @@ public class SecurityConfig {
         .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(auth -> auth
             .requestMatchers("/api/auth/**").permitAll()
+            .requestMatchers("/api/cards/payment").authenticated()
+            .requestMatchers("/api/finance-status/**").authenticated()
             .anyRequest().permitAll()
         );
 
