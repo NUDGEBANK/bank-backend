@@ -38,7 +38,7 @@ public class CardPaymentService {
                         "카드를 찾을 수 없습니다. cardId=" + request.cardId()
                 ));
 
-        Account account = accountRepository.findById(card.getAccountId())
+        Account account = accountRepository.findByIdForUpdate(card.getAccountId())
                 .orElseThrow(() -> new EntityNotFoundException(
                         "카드에 연결된 계좌를 찾을 수 없습니다. accountId=" + card.getAccountId()
                 ));
