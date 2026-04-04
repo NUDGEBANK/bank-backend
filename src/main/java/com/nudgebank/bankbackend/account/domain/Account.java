@@ -80,6 +80,13 @@ public class Account {
       throw new IllegalStateException("계좌 잔액 정보가 없습니다.");
     }
 
+    BigDecimal availableBalance = this.balance.subtract(
+      this.protectedBalance != null ? this.protectedBalance : BigDecimal.ZERO
+    );
+    if (availableBalance.compareTo(amount) < 0) {
+      throw new IllegalStateException("사용 가능 잔액이 부족합니다.");
+    }
+
     this.balance = this.balance.subtract(amount);
   }
 }
