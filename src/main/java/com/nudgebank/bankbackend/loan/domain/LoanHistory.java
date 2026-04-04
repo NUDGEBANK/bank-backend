@@ -27,7 +27,7 @@ public class LoanHistory {
     private Member member;
 
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "card_id", nullable = false, unique = true)
+    @JoinColumn(name = "card_id", nullable = false)
     private Card card;
 
     @Column(name = "total_principal", precision = 15, scale = 2)
