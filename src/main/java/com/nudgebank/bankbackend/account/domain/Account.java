@@ -1,16 +1,11 @@
 package com.nudgebank.bankbackend.account.domain;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import java.math.BigDecimal;
-import java.time.OffsetDateTime;
+import jakarta.persistence.*;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.AccessLevel;
+import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 
 @Entity
 @Table(name = "account")
@@ -75,5 +70,23 @@ public class Account {
         openedAt,
         protectedBalance
     );
+  }
+  public void withdraw(BigDecimal amount) {
+    if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+      throw new IllegalArgumentException("차감 금액은 0보다 커야 합니다.");
+    }
+
+    if (this.balance == null) {
+      throw new IllegalStateException("계좌 잔액 정보가 없습니다.");
+    }
+
+    BigDecimal availableBalance = this.balance.subtract(
+      this.protectedBalance != null ? this.protectedBalance : BigDecimal.ZERO
+    );
+    if (availableBalance.compareTo(amount) < 0) {
+      throw new IllegalStateException("사용 가능 잔액이 부족합니다.");
+    }
+
+    this.balance = this.balance.subtract(amount);
   }
 }

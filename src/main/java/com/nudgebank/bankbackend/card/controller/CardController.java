@@ -5,15 +5,13 @@ import com.nudgebank.bankbackend.card.dto.CardIssueRequest;
 import com.nudgebank.bankbackend.card.dto.CardIssueResponse;
 import com.nudgebank.bankbackend.card.service.CardHistoryService;
 import com.nudgebank.bankbackend.card.service.CardIssueService;
-import java.util.List;
+import jakarta.persistence.EntityNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/cards")
@@ -31,9 +29,7 @@ public class CardController {
       @RequestBody CardIssueRequest request,
       Authentication authentication
   ) {
-    Long userId = authentication != null && authentication.getPrincipal() instanceof Long principal
-        ? principal
-        : null;
+    Long userId = extractUserId(authentication);
 
     try {
       return ResponseEntity.ok(cardIssueService.issue(userId, request));
@@ -43,6 +39,9 @@ public class CardController {
           : HttpStatus.BAD_REQUEST;
       return ResponseEntity.status(status)
           .body(new CardIssueResponse(false, ex.getMessage(), null, null, null, null, null, null, null, null, null));
+    } catch (EntityNotFoundException ex) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND)
+          .body(new CardIssueResponse(false, ex.getMessage(), null, null, null, null, null, null, null, null, null));
     } catch (IllegalStateException ex) {
       return ResponseEntity.status(HttpStatus.CONFLICT)
           .body(new CardIssueResponse(false, ex.getMessage(), null, null, null, null, null, null, null, null, null));
@@ -51,9 +50,7 @@ public class CardController {
 
   @GetMapping("/history")
   public ResponseEntity<CardHistoryResponse> history(Authentication authentication) {
-    Long userId = authentication != null && authentication.getPrincipal() instanceof Long principal
-        ? principal
-        : null;
+    Long userId = extractUserId(authentication);
 
     try {
       return ResponseEntity.ok(cardHistoryService.getHistory(userId));
@@ -63,6 +60,18 @@ public class CardController {
           : HttpStatus.BAD_REQUEST;
       return ResponseEntity.status(status)
           .body(new CardHistoryResponse(false, ex.getMessage(), List.of()));
+    } catch (EntityNotFoundException ex) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND)
+              .body(new CardHistoryResponse(false, ex.getMessage(), List.of()));
     }
+  }
+
+  private Long extractUserId(Authentication authentication) {
+    if (authentication == null) {
+      return null;
+}
+
+    Object principal = authentication.getPrincipal();
+    return principal instanceof Long ? (Long) principal : null;
   }
 }
