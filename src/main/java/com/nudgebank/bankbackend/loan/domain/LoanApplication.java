@@ -1,6 +1,7 @@
 package com.nudgebank.bankbackend.loan.domain;
 
 import com.nudgebank.bankbackend.auth.domain.Member;
+import com.nudgebank.bankbackend.credit.domain.CreditHistory;
 import jakarta.persistence.*;
 import lombok.*;
 

@@ -129,7 +129,6 @@ public class CreditScoreService {
     double averageMonthlyValue = averageMonthly.doubleValue();
 
     score += adjustAssetScoreByActivity(assetScore, activeMonths, recentTransactionCount);
-
     score += scaleScore(activeMonths, 0, 3, 95);
     score += calculateSpendingBurdenScore(totalBalanceValue, averageMonthlyValue);
 
@@ -321,21 +320,21 @@ public class CreditScoreService {
 
     List<String> sentences = new ArrayList<>();
     sentences.add(accounts.isEmpty()
-        ? "연결된 계좌 정보가 적어 보수적으로 평가되었습니다."
-        : "연결된 계좌와 카드 거래 흐름이 평가에 반영되었습니다.");
+        ? "연결된 계좌 정보가 적어 보수적으로 평가했습니다."
+        : "연결된 계좌와 카드 거래 흐름을 함께 반영했습니다.");
 
     if (totalBalance.compareTo(new BigDecimal("1000000")) >= 0) {
-      sentences.add("예금 잔액이 안정적으로 유지되고 있습니다.");
+      sentences.add("현재 계좌 잔액 규모는 비교적 안정적인 편입니다.");
     } else {
-      sentences.add("예금 잔액 규모는 아직 크지 않은 편입니다.");
+      sentences.add("현재 계좌 잔액 규모는 아직 크지 않은 편입니다.");
     }
 
     if (transactions.isEmpty()) {
-      sentences.add("최근 소비 데이터가 적어 거래 안정성 판단은 제한적으로 반영되었습니다.");
+      sentences.add("최근 카드 거래 데이터가 적어 거래 안정성 판단은 제한적으로 반영했습니다.");
     } else if (volatility.compareTo(new BigDecimal("0.50")) <= 0) {
-      sentences.add("최근 3개월 소비 변동성이 낮아 상환 안정성이 양호한 편입니다.");
+      sentences.add("최근 3개월 소비 변동성이 낮아 거래 흐름은 비교적 안정적입니다.");
     } else {
-      sentences.add("최근 3개월 소비 변동성이 커 추가 관리가 필요합니다.");
+      sentences.add("최근 3개월 소비 변동성이 커서 보수적으로 반영했습니다.");
     }
 
     return String.join(" ", sentences);
@@ -368,17 +367,17 @@ public class CreditScoreService {
 
     List<CreditScoreResponse.CreditFactorDto> factors = List.of(
         new CreditScoreResponse.CreditFactorDto(
-            "상환 안정성",
-            creditScore >= 800 ? "양호" : "점검 필요",
-            "최근 계좌와 카드 거래 흐름을 바탕으로 내부적으로 계산한 결과입니다."
+            "상환 여력",
+            creditScore >= 800 ? "양호" : "추가 확인 필요",
+            "현재 계좌 잔액과 카드 거래 흐름을 바탕으로 내부 기준으로 계산한 결과입니다."
         ),
         new CreditScoreResponse.CreditFactorDto(
-            "소비 패턴",
+            "소비 흐름",
             creditScore >= 750 ? "안정적" : "변동성 있음",
-            "최근 3개월 소비 흐름과 월별 편차를 함께 반영합니다."
+            "최근 3개월 소비 흐름과 최근 거래일을 함께 반영합니다."
         ),
         new CreditScoreResponse.CreditFactorDto(
-            "예상 한도",
+            "참고 한도",
             formatAmount(estimatedLoanLimit),
             "상품 조건과 추가 심사 정보에 따라 실제 한도는 달라질 수 있습니다."
         )
@@ -390,14 +389,14 @@ public class CreditScoreService {
             "소비연동 자동상환 대출",
             "연 3.5%",
             "최대 5,000만원",
-            "내부 평가 점수와 최근 소비 흐름이 비교적 안정적으로 반영되었습니다."
+            "현재 내부 평가 점수와 최근 거래 흐름을 기준으로 예시 추천한 상품입니다."
         ),
         new CreditScoreResponse.RecommendedLoanDto(
             "youth-loan",
             "청년 주거안정 대출",
             "연 2.5%",
             "최대 3,000만원",
-            "상환 여력과 소비 패턴이 양호한 구간으로 분석되었습니다."
+            "현재 자금 여력과 소비 흐름이 비교적 안정적인 구간으로 분석된 예시입니다."
         )
     );
 
