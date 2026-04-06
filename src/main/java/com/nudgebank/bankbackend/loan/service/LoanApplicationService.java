@@ -39,18 +39,25 @@ public class LoanApplicationService {
         Member member = memberRepository.findById(memberId)
             .orElseThrow(() -> new EntityNotFoundException("존재하지 않는 회원입니다. memberId=" + memberId));
 
-        CreditHistory creditHistory = creditHistoryRepository
-            .findTopByMemberIdOrderByEvaluatedAtDescCreditHistoryIdDesc(memberId)
-            .orElseThrow(() -> new EntityNotFoundException("신용 이력이 없습니다. memberId=" + memberId));
-
         String loanProductType = toLoanProductType(request.productKey());
         LoanProduct loanProduct = loanProductRepository.findByLoanProductType(loanProductType)
             .orElseThrow(() -> new EntityNotFoundException("대출 상품을 찾을 수 없습니다. type=" + loanProductType));
+
+        boolean alreadyApplied = loanApplicationRepository
+            .findAllByMember_MemberIdOrderByAppliedAtDesc(memberId)
+            .stream()
+            .anyMatch(application ->
+                loanProductType.equals(application.getLoanProduct().getLoanProductType()));
+        if (alreadyApplied) {
+            throw new IllegalArgumentException("이미 신청이 완료된 상품입니다. 내 대출 관리에서 진행 상태를 확인해 주세요.");
+        }
 
         if (SELF_DEVELOPMENT_TYPE.equals(loanProductType)
             && accountRepository.findAllByMemberId(memberId).isEmpty()) {
             throw new IllegalArgumentException("자기계발 대출 신청을 위해 계좌가 필요합니다.");
         }
+
+        CreditHistory creditHistory = resolveCreditHistory(memberId, loanProductType);
 
         String applicationStatus = SELF_DEVELOPMENT_TYPE.equals(loanProductType)
             ? "DOCUMENT_REQUIRED"
@@ -79,6 +86,25 @@ public class LoanApplicationService {
         return loanApplicationRepository.findAllByMember_MemberIdOrderByAppliedAtDesc(memberId).stream()
             .map(this::toSummary)
             .toList();
+    }
+
+    private CreditHistory resolveCreditHistory(Long memberId, String loanProductType) {
+        return creditHistoryRepository.findTopByMemberIdOrderByEvaluatedAtDescCreditHistoryIdDesc(memberId)
+            .orElseGet(() -> {
+                if (!SELF_DEVELOPMENT_TYPE.equals(loanProductType)) {
+                    throw new EntityNotFoundException("대출 심사를 위한 신용 정보가 없습니다.");
+                }
+
+                return creditHistoryRepository.save(
+                    CreditHistory.create(
+                        memberId,
+                        null,
+                        null,
+                        "SELF_DEVELOPMENT_APPLICATION_INITIALIZED",
+                        LocalDateTime.now()
+                    )
+                );
+            });
     }
 
     private LoanApplicationSummaryResponse toSummary(LoanApplication loanApplication) {
