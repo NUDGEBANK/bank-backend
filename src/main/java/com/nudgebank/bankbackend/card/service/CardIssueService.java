@@ -55,7 +55,7 @@ public class CardIssueService {
     Account account = accountRepository.save(
         Account.create(
             userId,
-            member.getName(),
+            request.accountName(),
             generateUniqueAccountNumber(),
             BigDecimal.ZERO.setScale(2),
             now,
@@ -92,8 +92,7 @@ public class CardIssueService {
 
   private void validateRequest(CardIssueRequest request) {
     if (request == null
-        || isBlank(request.cardHolderName())
-        || isBlank(request.phoneNumber())
+        || isBlank(request.accountName())
         || isBlank(request.cardPassword())) {
       throw new IllegalArgumentException("MISSING_FIELDS");
     }

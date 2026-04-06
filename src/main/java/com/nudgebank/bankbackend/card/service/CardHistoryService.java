@@ -57,6 +57,7 @@ public class CardHistoryService {
           null,
           null,
           null,
+          null,
           BigDecimal.ZERO,
           List.of()
       );
@@ -73,6 +74,7 @@ public class CardHistoryService {
         account.getBalance(),
         card.getCardId(),
         card.getCardNumber(),
+        card.getExpiredYm(),
         card.getStatus(),
         calculateSpentThisMonth(card.getCardId()),
         transactions.stream().map(this::toTransactionDto).toList()

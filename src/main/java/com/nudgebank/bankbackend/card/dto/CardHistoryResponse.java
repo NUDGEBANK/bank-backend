@@ -15,6 +15,7 @@ public record CardHistoryResponse(
       BigDecimal balance,
       Long cardId,
       String cardNumber,
+      String expiredYm,
       String cardStatus,
       BigDecimal spentThisMonth,
       List<CardHistoryTransactionDto> transactions
