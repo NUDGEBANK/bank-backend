@@ -5,6 +5,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
 
-public interface AgeGroupBaselineRepository extends JpaRepository<AgeGroupBaseline, Long> {
+public interface AgeGroupBaselineRepository extends JpaRepository<AgeGroupBaseline, String> {
     Optional<AgeGroupBaseline> findByAgeGroup(String ageGroup);
 }
