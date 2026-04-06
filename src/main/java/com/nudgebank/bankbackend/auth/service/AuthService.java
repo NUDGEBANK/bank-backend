@@ -40,7 +40,11 @@ public class AuthService {
 
   @Transactional
   public Member signup(SignupRequest request) {
-    if (request == null || isBlank(request.userId()) || isBlank(request.password()) || isBlank(request.name())) {
+    if (request == null
+        || isBlank(request.userId())
+        || isBlank(request.password())
+        || isBlank(request.name())
+        || isBlank(request.phoneNumber())) {
       throw new IllegalArgumentException("MISSING_FIELDS");
     }
     if (memberRepository.existsByLoginId(request.userId())) {
@@ -54,7 +58,8 @@ public class AuthService {
             passwordEncoder.encode(request.password()),
             request.birth(),
             OffsetDateTime.now(),
-            request.gender()
+            request.gender(),
+            request.phoneNumber()
         )
     );
   }

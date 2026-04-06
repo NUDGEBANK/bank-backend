@@ -7,5 +7,6 @@ public record SignupRequest(
     String userId,
     String password,
     LocalDate birth,
-    String gender
+    String gender,
+    String phoneNumber
 ) {}

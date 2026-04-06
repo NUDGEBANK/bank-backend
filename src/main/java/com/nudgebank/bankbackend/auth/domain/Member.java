@@ -44,6 +44,9 @@ public class Member {
   @Column(name = "gender", length = 10)
   private String gender;
 
+  @Column(name = "phone_number", length = 20)
+  private String phoneNumber;
+
   private Member(
       Long memberId,
       String id,
@@ -51,7 +54,8 @@ public class Member {
       String password,
       LocalDate birth,
       OffsetDateTime createdAt,
-      String gender
+      String gender,
+      String phoneNumber
   ) {
     this.memberId = memberId;
     this.id = id;
@@ -60,6 +64,7 @@ public class Member {
     this.birth = birth;
     this.createdAt = createdAt;
     this.gender = gender;
+    this.phoneNumber = phoneNumber;
   }
 
   public static Member create(
@@ -68,8 +73,9 @@ public class Member {
       String password,
       LocalDate birth,
       OffsetDateTime createdAt,
-      String gender
+      String gender,
+      String phoneNumber
   ) {
-    return new Member(null, id, name, password, birth, createdAt, gender);
+    return new Member(null, id, name, password, birth, createdAt, gender, phoneNumber);
   }
 }
