@@ -41,8 +41,12 @@ public class AgeGroupBaselineService {
                 .ageGroup(baseline.getAgeGroup())
                 .avgSpending(baseline.getAvgSpending())
                 .essentialRatio(baseline.getEssentialRatio())
+                .normalRatio(baseline.getNormalRatio())
+                .discretionaryRatio(baseline.getDiscretionaryRatio())
                 .riskRatio(baseline.getRiskRatio())
                 .volatility(baseline.getVolatility())
+                .volatilityIndex(baseline.getVolatilityIndex())
+                .repaymentAction(baseline.getRepaymentAction())
                 .build();
     }
 

@@ -5,7 +5,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
-import java.time.OffsetDateTime;
 
 @Entity
 @Table(name = "age_group_baseline")
@@ -14,11 +13,7 @@ import java.time.OffsetDateTime;
 public class AgeGroupBaseline {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "age_baseline_id")
-    private Long id;
-
-    @Column(name = "age_group", nullable = false, length = 20, unique = true)
+    @Column(name = "age_group", nullable = false, length = 20)
     private String ageGroup;
 
     @Column(name = "avg_spending", precision = 15, scale = 2)
@@ -27,15 +22,21 @@ public class AgeGroupBaseline {
     @Column(name = "essential_ratio", precision = 5, scale = 4)
     private BigDecimal essentialRatio;
 
+    @Column(name = "normal_ratio", precision = 5, scale = 4)
+    private BigDecimal normalRatio;
+
+    @Column(name = "discretionary_ratio", precision = 5, scale = 4)
+    private BigDecimal discretionaryRatio;
+
     @Column(name = "risk_ratio", precision = 5, scale = 4)
     private BigDecimal riskRatio;
 
     @Column(name = "volatility", precision = 15, scale = 2)
     private BigDecimal volatility;
 
-    @Column(name = "created_at")
-    private OffsetDateTime createdAt;
+    @Column(name = "volatility_index", precision = 5, scale = 4)
+    private BigDecimal volatilityIndex;
 
-    @Column(name = "updated_at")
-    private OffsetDateTime updatedAt;
+    @Column(name = "repayment_action", length = 20)
+    private String repaymentAction;
 }
