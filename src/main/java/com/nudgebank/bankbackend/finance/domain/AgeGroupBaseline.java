@@ -18,7 +18,7 @@ public class AgeGroupBaseline {
     @Column(name = "age_baseline_id")
     private Long id;
 
-    @Column(name = "age_group", nullable = false, length = 20)
+    @Column(name = "age_group", nullable = false, length = 20, unique = true)
     private String ageGroup;
 
     @Column(name = "avg_spending", precision = 15, scale = 2)
