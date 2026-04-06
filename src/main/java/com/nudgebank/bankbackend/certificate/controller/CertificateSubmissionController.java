@@ -26,17 +26,15 @@ public class CertificateSubmissionController {
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
     public CertificateSubmissionResponse submitCertificate(
-            @RequestParam(value = "memberId", required = false) Long memberId,
             @RequestParam("loanId") Long loanId,
             @RequestParam("certificateId") Long certificateId,
             @RequestParam("file") MultipartFile file,
             Authentication authentication
     ) {
-        Long authenticatedMemberId = SecurityUtil.extractUserId(authentication);
-        Long resolvedMemberId = authenticatedMemberId != null ? authenticatedMemberId : memberId;
-        if (resolvedMemberId == null) {
+        Long memberId = SecurityUtil.extractUserId(authentication);
+        if (memberId == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         }
-        return certificateSubmissionService.submit(resolvedMemberId, loanId, certificateId, file);
+        return certificateSubmissionService.submit(memberId, loanId, certificateId, file);
     }
 }

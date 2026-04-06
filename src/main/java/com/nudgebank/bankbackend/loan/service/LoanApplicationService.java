@@ -59,9 +59,7 @@ public class LoanApplicationService {
 
         CreditHistory creditHistory = resolveCreditHistory(memberId, loanProductType);
 
-        String applicationStatus = SELF_DEVELOPMENT_TYPE.equals(loanProductType)
-            ? "DOCUMENT_REQUIRED"
-            : "UNDER_REVIEW";
+        String applicationStatus = "APPROVED";
 
         LoanApplication savedApplication = loanApplicationRepository.save(
             LoanApplication.builder()

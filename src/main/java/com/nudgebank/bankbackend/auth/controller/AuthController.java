@@ -12,6 +12,7 @@ import com.nudgebank.bankbackend.auth.security.JwtProvider;
 import com.nudgebank.bankbackend.auth.security.SecurityUtil;
 import com.nudgebank.bankbackend.auth.service.AuthService;
 import io.jsonwebtoken.Claims;
+import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.time.Instant;
@@ -121,7 +122,7 @@ public class AuthController {
     }
 
     Member member = memberRepository.findById(memberId)
-        .orElseThrow(() -> new IllegalArgumentException("Member not found"));
+        .orElseThrow(() -> new EntityNotFoundException("회원 정보를 찾을 수 없습니다."));
 
     return ResponseEntity.ok(new MeResponse(
         member.getMemberId(),
