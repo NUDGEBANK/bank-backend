@@ -8,10 +8,12 @@ import com.nudgebank.bankbackend.card.domain.CardTransaction;
 import com.nudgebank.bankbackend.card.repository.CardRepository;
 import com.nudgebank.bankbackend.card.repository.CardTransactionRepository;
 import com.nudgebank.bankbackend.credit.domain.CreditHistory;
+import com.nudgebank.bankbackend.credit.dto.CreditHistoryListResponse;
 import com.nudgebank.bankbackend.credit.dto.CreditScoreResponse;
 import com.nudgebank.bankbackend.credit.repository.CreditHistoryRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
@@ -27,6 +29,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class CreditScoreService {
   private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+  private static final Duration EVALUATION_COOLDOWN = Duration.ofMinutes(5);
 
   private final MemberRepository memberRepository;
   private final AccountRepository accountRepository;
@@ -61,13 +64,39 @@ public class CreditScoreService {
 
   public CreditScoreResponse evaluate(Long memberId) {
     validateMember(memberId);
-    Integer previousScore = creditHistoryRepository
-        .findTopByMemberIdOrderByEvaluatedAtDescCreditHistoryIdDesc(memberId)
+    Optional<CreditHistory> latestOptional = creditHistoryRepository
+        .findTopByMemberIdOrderByEvaluatedAtDescCreditHistoryIdDesc(memberId);
+
+    if (latestOptional.isPresent() && isWithinCooldown(latestOptional.get())) {
+      CreditHistory latest = latestOptional.get();
+      Integer previousScore = findPreviousScore(memberId, latest.getCreditHistoryId());
+      return toResponse(latest, previousScore);
+    }
+
+    Integer previousScore = latestOptional
         .map(CreditHistory::getCreditScore)
         .orElse(null);
 
     CreditHistory saved = evaluateAndSave(memberId);
     return toResponse(saved, previousScore);
+  }
+
+  public CreditHistoryListResponse getHistory(Long memberId) {
+    validateMember(memberId);
+
+    List<CreditHistoryListResponse.CreditHistoryItemDto> histories = creditHistoryRepository
+        .findTop6ByMemberIdOrderByEvaluatedAtDescCreditHistoryIdDesc(memberId)
+        .stream()
+        .map(history -> new CreditHistoryListResponse.CreditHistoryItemDto(
+            history.getCreditHistoryId(),
+            history.getCreditScore(),
+            history.getCreditGrade(),
+            history.getEvaluationResult(),
+            history.getEvaluatedAt() == null ? null : history.getEvaluatedAt().format(DATE_TIME_FORMATTER)
+        ))
+        .toList();
+
+    return new CreditHistoryListResponse(true, "OK", histories);
   }
 
   private void validateMember(Long memberId) {
@@ -77,6 +106,14 @@ public class CreditScoreService {
     if (!memberRepository.existsById(memberId)) {
       throw new IllegalArgumentException("MEMBER_NOT_FOUND");
     }
+  }
+
+  private boolean isWithinCooldown(CreditHistory latest) {
+    if (latest.getEvaluatedAt() == null) {
+      return false;
+    }
+    Duration elapsed = Duration.between(latest.getEvaluatedAt(), LocalDateTime.now());
+    return !elapsed.isNegative() && elapsed.compareTo(EVALUATION_COOLDOWN) < 0;
   }
 
   private CreditHistory evaluateAndSave(Long memberId) {
@@ -367,7 +404,7 @@ public class CreditScoreService {
 
     List<CreditScoreResponse.CreditFactorDto> factors = List.of(
         new CreditScoreResponse.CreditFactorDto(
-            "상환 여력",
+            "자금 여력",
             creditScore >= 800 ? "양호" : "추가 확인 필요",
             "현재 계좌 잔액과 카드 거래 흐름을 바탕으로 내부 기준으로 계산한 결과입니다."
         ),

@@ -1,5 +1,6 @@
 package com.nudgebank.bankbackend.credit.controller;
 
+import com.nudgebank.bankbackend.credit.dto.CreditHistoryListResponse;
 import com.nudgebank.bankbackend.credit.dto.CreditScoreResponse;
 import com.nudgebank.bankbackend.credit.service.CreditScoreService;
 import java.util.List;
@@ -34,6 +35,23 @@ public class CreditScoreController {
           : HttpStatus.BAD_REQUEST;
       return ResponseEntity.status(status)
           .body(new CreditScoreResponse(false, ex.getMessage(), null, null, null, null, null, null, List.of(), List.of()));
+    }
+  }
+
+  @GetMapping("/history")
+  public ResponseEntity<CreditHistoryListResponse> getMyHistory(Authentication authentication) {
+    Long userId = authentication != null && authentication.getPrincipal() instanceof Long principal
+        ? principal
+        : null;
+
+    try {
+      return ResponseEntity.ok(creditScoreService.getHistory(userId));
+    } catch (IllegalArgumentException ex) {
+      HttpStatus status = "UNAUTHORIZED".equals(ex.getMessage())
+          ? HttpStatus.UNAUTHORIZED
+          : HttpStatus.BAD_REQUEST;
+      return ResponseEntity.status(status)
+          .body(new CreditHistoryListResponse(false, ex.getMessage(), List.of()));
     }
   }
 

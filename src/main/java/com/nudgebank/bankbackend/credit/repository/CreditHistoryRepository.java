@@ -9,4 +9,6 @@ public interface CreditHistoryRepository extends JpaRepository<CreditHistory, Lo
   Optional<CreditHistory> findTopByMemberIdOrderByEvaluatedAtDescCreditHistoryIdDesc(Long memberId);
 
   List<CreditHistory> findTop2ByMemberIdOrderByEvaluatedAtDescCreditHistoryIdDesc(Long memberId);
+
+  List<CreditHistory> findTop6ByMemberIdOrderByEvaluatedAtDescCreditHistoryIdDesc(Long memberId);
 }
