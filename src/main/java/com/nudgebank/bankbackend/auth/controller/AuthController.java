@@ -2,11 +2,14 @@ package com.nudgebank.bankbackend.auth.controller;
 
 import com.nudgebank.bankbackend.auth.dto.AuthResponse;
 import com.nudgebank.bankbackend.auth.dto.LoginRequest;
+import com.nudgebank.bankbackend.auth.dto.MeResponse;
 import com.nudgebank.bankbackend.auth.dto.SignupRequest;
 import com.nudgebank.bankbackend.auth.domain.RefreshToken;
 import com.nudgebank.bankbackend.auth.domain.Member;
+import com.nudgebank.bankbackend.auth.repository.MemberRepository;
 import com.nudgebank.bankbackend.auth.security.CookieUtil;
 import com.nudgebank.bankbackend.auth.security.JwtProvider;
+import com.nudgebank.bankbackend.auth.security.SecurityUtil;
 import com.nudgebank.bankbackend.auth.service.AuthService;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,6 +17,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.time.Instant;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -27,10 +32,12 @@ public class AuthController {
 
   private final AuthService authService;
   private final JwtProvider jwtProvider;
+  private final MemberRepository memberRepository;
 
-  public AuthController(AuthService authService, JwtProvider jwtProvider) {
+  public AuthController(AuthService authService, JwtProvider jwtProvider, MemberRepository memberRepository) {
     this.authService = authService;
     this.jwtProvider = jwtProvider;
+    this.memberRepository = memberRepository;
   }
 
   @PostMapping("/signup")
@@ -104,6 +111,23 @@ public class AuthController {
     }
     clearAuthCookies(res);
     return ResponseEntity.ok(new AuthResponse(true, "OK"));
+  }
+
+  @GetMapping("/me")
+  public ResponseEntity<MeResponse> me(Authentication authentication) {
+    Long memberId = SecurityUtil.extractUserId(authentication);
+    if (memberId == null) {
+      return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+    }
+
+    Member member = memberRepository.findById(memberId)
+        .orElseThrow(() -> new IllegalArgumentException("Member not found"));
+
+    return ResponseEntity.ok(new MeResponse(
+        member.getMemberId(),
+        member.getId(),
+        member.getName()
+    ));
   }
 
   private void setAuthCookies(HttpServletResponse res, AuthService.TokenPair tokens) {
