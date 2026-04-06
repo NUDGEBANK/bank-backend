@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class CreditScoreService {
@@ -56,12 +57,13 @@ public class CreditScoreService {
 
     CreditHistory latest = creditHistoryRepository
         .findTopByMemberIdOrderByEvaluatedAtDescCreditHistoryIdDesc(memberId)
-        .orElseGet(() -> evaluateAndSave(memberId));
+        .orElseThrow(() -> new IllegalArgumentException("CREDIT_HISTORY_NOT_FOUND"));
 
     Integer previousScore = findPreviousScore(memberId, latest.getCreditHistoryId());
     return toResponse(latest, previousScore);
   }
 
+  @Transactional
   public CreditScoreResponse evaluate(Long memberId) {
     validateMember(memberId);
     Optional<CreditHistory> latestOptional = creditHistoryRepository

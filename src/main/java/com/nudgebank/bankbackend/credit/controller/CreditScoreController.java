@@ -32,6 +32,8 @@ public class CreditScoreController {
     } catch (IllegalArgumentException ex) {
       HttpStatus status = "UNAUTHORIZED".equals(ex.getMessage())
           ? HttpStatus.UNAUTHORIZED
+          : "CREDIT_HISTORY_NOT_FOUND".equals(ex.getMessage())
+              ? HttpStatus.NOT_FOUND
           : HttpStatus.BAD_REQUEST;
       return ResponseEntity.status(status)
           .body(new CreditScoreResponse(false, ex.getMessage(), null, null, null, null, null, null, List.of(), List.of()));
