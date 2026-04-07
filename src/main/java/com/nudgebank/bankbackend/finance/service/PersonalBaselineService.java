@@ -67,8 +67,10 @@ public class PersonalBaselineService {
                 baselineEndDate.atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime()
         );
 
+        FinancialStatusResponse financialStatus = financialStatusService.getFinancialStatus(memberId, transactionId);
+
         if (transactions.isEmpty()) {
-            return buildAgeOnlyResponse(memberId, age, ageBaseline);
+            return buildAgeOnlyResponse(memberId, age, ageBaseline, financialStatus);
         }
 
         PersonalMetrics personal = calculatePersonalMetrics(baselineStartDate, today, transactions);
@@ -76,7 +78,7 @@ public class PersonalBaselineService {
 
         Weight weight = resolveWeight(firstTransactionDate, today);
 
-        FinancialStatusResponse financialStatus = financialStatusService.getFinancialStatus(memberId, transactionId);
+
 
         return FinalBaselineResponse.builder()
                 .memberId(memberId)
@@ -179,7 +181,7 @@ public class PersonalBaselineService {
                 );
     }
 
-    private FinalBaselineResponse buildAgeOnlyResponse(Long memberId, int age, AgeGroupBaseline baseline) {
+    private FinalBaselineResponse buildAgeOnlyResponse(Long memberId, int age, AgeGroupBaseline baseline, FinancialStatusResponse financialStatusResponse) {
         return FinalBaselineResponse.builder()
                 .memberId(memberId)
                 .ageGroup(baseline.getAgeGroup())
@@ -193,6 +195,7 @@ public class PersonalBaselineService {
                 .riskRatio(baseline.getRiskRatio())
                 .volatility(baseline.getVolatility())
                 .baselineSource("AGE_ONLY")
+                .financialStatusResponse(financialStatusResponse)
                 .build();
     }
 
