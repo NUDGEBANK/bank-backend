@@ -41,4 +41,30 @@ public interface CardTransactionRepository extends JpaRepository<CardTransaction
           @Param("transactionDatetime") OffsetDateTime transactionDatetime,
           @Param("transactionId") Long transactionId
   );
+
+    @EntityGraph(attributePaths = {"market", "category", "card"})
+    @Query("""
+    select ct
+    from CardTransaction ct
+    join ct.card c
+    join Account a on a.accountId = c.accountId
+    where a.memberId = :memberId
+      and ct.transactionDatetime >= :start
+      and ct.transactionDatetime < :end
+    order by ct.transactionDatetime asc
+""")
+    List<CardTransaction> findByMemberIdAndTransactionDatetimeBetween(
+            @Param("memberId") Long memberId,
+            @Param("start") OffsetDateTime start,
+            @Param("end") OffsetDateTime end
+    );
+
+    @Query("""
+    select min(ct.transactionDatetime)
+    from CardTransaction ct
+    join ct.card c
+    join Account a on a.accountId = c.accountId
+    where a.memberId = :memberId
+""")
+    OffsetDateTime findFirstTransactionDatetimeByMemberId(@Param("memberId") Long memberId);
 }
