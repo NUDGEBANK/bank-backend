@@ -50,9 +50,11 @@ public class PersonalBaselineService {
         AgeGroupBaseline ageBaseline = ageGroupBaselineRepository.findById(ageGroup)
                 .orElseThrow(() -> new EntityNotFoundException("연령 baseline이 없습니다. ageGroup=" + ageGroup));
 
+        FinancialStatusResponse financialStatus = financialStatusService.getFinancialStatus(memberId, transactionId);
+
         OffsetDateTime firstTransactionDatetime = cardTransactionRepository.findFirstTransactionDatetimeByMemberId(memberId);
         if (firstTransactionDatetime == null) {
-            return buildAgeOnlyResponse(memberId, age, ageBaseline);
+            return buildAgeOnlyResponse(memberId, age, ageBaseline,  financialStatus);
         }
 
         LocalDate today = LocalDate.now(ZoneId.systemDefault());
@@ -66,8 +68,6 @@ public class PersonalBaselineService {
                 baselineStartDate.atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime(),
                 baselineEndDate.atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime()
         );
-
-        FinancialStatusResponse financialStatus = financialStatusService.getFinancialStatus(memberId, transactionId);
 
         if (transactions.isEmpty()) {
             return buildAgeOnlyResponse(memberId, age, ageBaseline, financialStatus);
