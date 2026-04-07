@@ -1,6 +1,7 @@
 package com.nudgebank.bankbackend.finance.service;
 
 import com.nudgebank.bankbackend.card.domain.CardTransaction;
+import com.nudgebank.bankbackend.finance.domain.ConsumptionType;
 import org.springframework.stereotype.Component;
 
 @Component

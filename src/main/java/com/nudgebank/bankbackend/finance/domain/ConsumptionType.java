@@ -1,4 +1,4 @@
-package com.nudgebank.bankbackend.finance.service;
+package com.nudgebank.bankbackend.finance.domain;
 
 public enum ConsumptionType {
     ESSENTIAL,

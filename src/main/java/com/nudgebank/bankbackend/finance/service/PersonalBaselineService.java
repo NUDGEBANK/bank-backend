@@ -6,6 +6,7 @@ import com.nudgebank.bankbackend.card.domain.CardTransaction;
 import com.nudgebank.bankbackend.card.repository.CardTransactionRepository;
 import com.nudgebank.bankbackend.finance.domain.AgeGroupBaseline;
 import com.nudgebank.bankbackend.finance.domain.ConsumerBaseline;
+import com.nudgebank.bankbackend.finance.domain.ConsumptionType;
 import com.nudgebank.bankbackend.finance.dto.FinalBaselineResponse;
 import com.nudgebank.bankbackend.finance.dto.FinancialStatusResponse;
 import com.nudgebank.bankbackend.finance.repository.AgeGroupBaselineRepository;
