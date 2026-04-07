@@ -28,4 +28,6 @@ public class FinalBaselineResponse {
     private BigDecimal volatility;
 
     private String baselineSource; // AGE_ONLY, MIXED, PERSONAL_HEAVY
+
+    private FinancialStatusResponse financialStatusResponse;
 }

@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -18,12 +19,12 @@ public class PersonalBaselineController {
 
     private final PersonalBaselineService personalBaselineService;
 
-    @GetMapping("/final/me")
-    public FinalBaselineResponse getFinalBaseline(Authentication authentication) {
+    @GetMapping("/final/me/{transactionId}")
+    public FinalBaselineResponse getFinalBaseline(Authentication authentication, @PathVariable Long transactionId) {
         Long memberId = SecurityUtil.extractUserId(authentication);
         if (memberId == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         }
-        return personalBaselineService.calculateAndGetFinalBaseline(memberId);
+        return personalBaselineService.calculateAndGetFinalBaseline(memberId, transactionId);
     }
 }

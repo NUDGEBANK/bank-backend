@@ -7,6 +7,7 @@ import com.nudgebank.bankbackend.card.repository.CardTransactionRepository;
 import com.nudgebank.bankbackend.finance.domain.AgeGroupBaseline;
 import com.nudgebank.bankbackend.finance.domain.ConsumerBaseline;
 import com.nudgebank.bankbackend.finance.dto.FinalBaselineResponse;
+import com.nudgebank.bankbackend.finance.dto.FinancialStatusResponse;
 import com.nudgebank.bankbackend.finance.repository.AgeGroupBaselineRepository;
 import com.nudgebank.bankbackend.finance.repository.ConsumerBaselineRepository;
 import jakarta.persistence.EntityNotFoundException;
@@ -36,8 +37,9 @@ public class PersonalBaselineService {
     private final ConsumerBaselineRepository consumerBaselineRepository;
     private final CardTransactionRepository cardTransactionRepository;
     private final ConsumptionTypeClassifier consumptionTypeClassifier;
+    private final FinancialStatusService financialStatusService;
 
-    public FinalBaselineResponse calculateAndGetFinalBaseline(Long memberId) {
+    public FinalBaselineResponse calculateAndGetFinalBaseline(Long memberId, Long transactionId) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new EntityNotFoundException("존재하지 않는 회원입니다. memberId=" + memberId));
 
@@ -73,6 +75,8 @@ public class PersonalBaselineService {
 
         Weight weight = resolveWeight(firstTransactionDate, today);
 
+        FinancialStatusResponse financialStatus = financialStatusService.getFinancialStatus(memberId, transactionId);
+
         return FinalBaselineResponse.builder()
                 .memberId(memberId)
                 .ageGroup(ageGroup)
@@ -91,6 +95,7 @@ public class PersonalBaselineService {
                 .baselineSource(weight.personalWeight().compareTo(BigDecimal.ZERO) == 0 ? "AGE_ONLY"
                         : weight.personalWeight().compareTo(new BigDecimal("0.7")) >= 0 ? "PERSONAL_HEAVY"
                         : "MIXED")
+                .financialStatusResponse(financialStatus)
                 .build();
     }
 
