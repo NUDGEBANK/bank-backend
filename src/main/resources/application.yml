@@ -20,6 +20,11 @@ spring:
 server:
   port: 9999
 
+ocr:
+  base-url: ${OCR_BASE_URL}
+  connect-timeout-ms: 5000
+  read-timeout-ms: 120000
+
 jwt:
   secret: ${JWT_SECRET:}
   access-ttl-seconds: ${JWT_ACCESS_TTL_SECONDS:}
