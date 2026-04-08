@@ -4,6 +4,7 @@ import com.nudgebank.bankbackend.auth.dto.AuthResponse;
 import com.nudgebank.bankbackend.auth.dto.LoginRequest;
 import com.nudgebank.bankbackend.auth.dto.MeResponse;
 import com.nudgebank.bankbackend.auth.dto.SignupRequest;
+import com.nudgebank.bankbackend.auth.dto.VerifyPasswordRequest;
 import com.nudgebank.bankbackend.auth.domain.RefreshToken;
 import com.nudgebank.bankbackend.auth.domain.Member;
 import com.nudgebank.bankbackend.auth.repository.MemberRepository;
@@ -127,8 +128,29 @@ public class AuthController {
     return ResponseEntity.ok(new MeResponse(
         member.getMemberId(),
         member.getId(),
-        member.getName()
+        member.getName(),
+        member.getBirth() != null ? member.getBirth().toString() : null,
+        member.getGender(),
+        member.getPhoneNumber()
     ));
+  }
+
+  @PostMapping("/verify-password")
+  public ResponseEntity<AuthResponse> verifyPassword(
+      Authentication authentication,
+      @RequestBody VerifyPasswordRequest request
+  ) {
+    Long memberId = SecurityUtil.extractUserId(authentication);
+    if (memberId == null) {
+      return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new AuthResponse(false, "UNAUTHORIZED"));
+    }
+
+    boolean isValid = authService.verifyPassword(memberId, request.password());
+    if (!isValid) {
+      return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new AuthResponse(false, "INVALID_CREDENTIALS"));
+    }
+
+    return ResponseEntity.ok(new AuthResponse(true, "OK"));
   }
 
   private void setAuthCookies(HttpServletResponse res, AuthService.TokenPair tokens) {

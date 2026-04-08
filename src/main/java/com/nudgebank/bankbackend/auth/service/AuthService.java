@@ -79,6 +79,19 @@ public class AuthService {
     return member.get();
   }
 
+  public boolean verifyPassword(Long memberId, String password) {
+    if (memberId == null || isBlank(password)) {
+      return false;
+    }
+
+    Optional<Member> member = memberRepository.findById(memberId);
+    if (member.isEmpty()) {
+      return false;
+    }
+
+    return passwordEncoder.matches(password, member.get().getPassword());
+  }
+
   public TokenPair issueTokens(Long memberId) {
     String rid = UUID.randomUUID().toString().replace("-", "");
     String accessToken = jwtProvider.createAccessToken(memberId);
