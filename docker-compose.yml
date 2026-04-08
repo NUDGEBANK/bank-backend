@@ -4,14 +4,42 @@ services:
     container_name: nudgebank-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: nudgebank
-      POSTGRES_USER: postgres
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       TZ: Asia/Seoul
     ports:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    networks:
+      - nudge-net
+
+  bank-backend:
+    build: .
+    container_name: nudge-bank-backend
+    restart: unless-stopped
+    environment:
+      DB_URL: jdbc:postgresql://${DB_HOST}:5432/${POSTGRES_DB}
+      DB_USERNAME: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      - postgres
+    networks:
+      - nudge-net
+
+  bank-frontend:
+    build: ../bank-frontend
+    container_name: nudge-bank-frontend
+    ports:
+      - "81:80"
+    depends_on:
+      - bank-backend
+    networks:
+      - nudge-net
+
+networks:
+  nudge-net:
 
 volumes:
   postgres-data:
