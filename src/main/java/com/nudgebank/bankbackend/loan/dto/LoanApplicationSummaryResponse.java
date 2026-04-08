@@ -9,5 +9,8 @@ public record LoanApplicationSummaryResponse(
     String applicationStatus,
     LocalDateTime appliedAt,
     boolean requiresCertificateSubmission,
-    boolean certificateSubmitted
+    boolean certificateSubmitted,
+    boolean preferentialRateVerificationAvailable,
+    boolean preferentialRateVerificationSubmitted,
+    String preferentialRateVerificationStatus
 ) {}

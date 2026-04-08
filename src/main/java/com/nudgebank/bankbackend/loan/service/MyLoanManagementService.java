@@ -2,16 +2,20 @@ package com.nudgebank.bankbackend.loan.service;
 
 import com.nudgebank.bankbackend.loan.domain.LoanHistory;
 import com.nudgebank.bankbackend.loan.domain.Loan;
+import com.nudgebank.bankbackend.loan.domain.LoanApplication;
 import com.nudgebank.bankbackend.loan.domain.RepaymentSchedule;
 import com.nudgebank.bankbackend.loan.dto.MyLoanRepaymentHistoryResponse;
 import com.nudgebank.bankbackend.loan.dto.MyLoanRepaymentScheduleResponse;
 import com.nudgebank.bankbackend.loan.dto.MyLoanSummaryResponse;
+import com.nudgebank.bankbackend.loan.repository.LoanApplicationRepository;
 import com.nudgebank.bankbackend.loan.repository.LoanHistoryRepository;
 import com.nudgebank.bankbackend.loan.repository.LoanRepository;
 import com.nudgebank.bankbackend.loan.repository.LoanRepaymentHistoryRepository;
 import com.nudgebank.bankbackend.loan.repository.RepaymentScheduleRepository;
 import jakarta.persistence.EntityNotFoundException;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -22,13 +26,18 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class MyLoanManagementService {
 
+    private final LoanApplicationRepository loanApplicationRepository;
     private final LoanHistoryRepository loanHistoryRepository;
     private final LoanRepository loanRepository;
     private final RepaymentScheduleRepository repaymentScheduleRepository;
     private final LoanRepaymentHistoryRepository loanRepaymentHistoryRepository;
 
     public MyLoanSummaryResponse getSummary(Long memberId) {
-        LoanHistory loanHistory = getLatestLoanHistory(memberId);
+        LoanHistory loanHistory = loanHistoryRepository.findTopByMember_MemberIdOrderByCreatedAtDesc(memberId).orElse(null);
+        if (loanHistory == null) {
+            return buildPendingLoanSummary(memberId);
+        }
+
         Loan loan = loanRepository.findTopByMember_MemberIdOrderByStartDateDescIdDesc(memberId).orElse(null);
         List<RepaymentSchedule> schedules =
             repaymentScheduleRepository.findAllByLoanHistory_IdOrderByDueDateAsc(loanHistory.getId());
@@ -65,7 +74,12 @@ public class MyLoanManagementService {
     }
 
     public List<MyLoanRepaymentScheduleResponse> getRepaymentSchedules(Long memberId) {
-        LoanHistory loanHistory = getLatestLoanHistory(memberId);
+        LoanHistory loanHistory = loanHistoryRepository.findTopByMember_MemberIdOrderByCreatedAtDesc(memberId).orElse(null);
+        if (loanHistory == null) {
+            ensureDisplayableLoanExists(memberId);
+            return List.of();
+        }
+
         return repaymentScheduleRepository.findAllByLoanHistory_IdOrderByDueDateAsc(loanHistory.getId()).stream()
             .map(schedule -> new MyLoanRepaymentScheduleResponse(
                 schedule.getScheduleId(),
@@ -81,7 +95,12 @@ public class MyLoanManagementService {
     }
 
     public List<MyLoanRepaymentHistoryResponse> getRepaymentHistories(Long memberId) {
-        LoanHistory loanHistory = getLatestLoanHistory(memberId);
+        LoanHistory loanHistory = loanHistoryRepository.findTopByMember_MemberIdOrderByCreatedAtDesc(memberId).orElse(null);
+        if (loanHistory == null) {
+            ensureDisplayableLoanExists(memberId);
+            return List.of();
+        }
+
         return loanRepaymentHistoryRepository
             .findTop10ByLoanHistory_IdOrderByRepaymentDatetimeDesc(loanHistory.getId()).stream()
             .map(history -> new MyLoanRepaymentHistoryResponse(
@@ -92,6 +111,44 @@ public class MyLoanManagementService {
                 nullSafe(history.getRemainingBalance())
             ))
             .toList();
+    }
+
+    private MyLoanSummaryResponse buildPendingLoanSummary(Long memberId) {
+        LoanApplication application = ensureDisplayableLoanExists(memberId);
+        BigDecimal totalPrincipal = nullSafe(application.getLoanAmount());
+        BigDecimal interestRate = application.getLoanProduct().getMinInterestRate() != null
+            ? application.getLoanProduct().getMinInterestRate()
+            : BigDecimal.ZERO;
+        int repaymentMonths = application.getLoanProduct().getRepaymentPeriodMonth() != null
+            && application.getLoanProduct().getRepaymentPeriodMonth() > 0
+            ? application.getLoanProduct().getRepaymentPeriodMonth()
+            : 1;
+        LocalDate startDate = application.getAppliedAt() != null
+            ? application.getAppliedAt().toLocalDate()
+            : LocalDate.now();
+        BigDecimal nextPaymentAmount = repaymentMonths > 0
+            ? totalPrincipal.divide(BigDecimal.valueOf(repaymentMonths), 0, RoundingMode.UP)
+            : totalPrincipal;
+
+        return new MyLoanSummaryResponse(
+            null,
+            application.getApplicationStatus(),
+            totalPrincipal,
+            totalPrincipal,
+            BigDecimal.ZERO,
+            interestRate,
+            startDate,
+            startDate.plusMonths(repaymentMonths),
+            startDate.plusMonths(1),
+            nextPaymentAmount,
+            BigDecimal.ZERO,
+            null
+        );
+    }
+
+    private LoanApplication ensureDisplayableLoanExists(Long memberId) {
+        return loanApplicationRepository.findTopByMember_MemberIdOrderByAppliedAtDesc(memberId)
+            .orElseThrow(() -> new EntityNotFoundException("?異?愿由??뺣낫媛 ?놁뒿?덈떎."));
     }
 
     private LoanHistory getLatestLoanHistory(Long memberId) {

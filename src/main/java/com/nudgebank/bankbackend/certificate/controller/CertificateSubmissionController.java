@@ -26,7 +26,8 @@ public class CertificateSubmissionController {
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
     public CertificateSubmissionResponse submitCertificate(
-            @RequestParam("loanId") Long loanId,
+            @RequestParam(value = "loanApplicationId", required = false) Long loanApplicationId,
+            @RequestParam(value = "loanId", required = false) Long legacyLoanId,
             @RequestParam("certificateId") Long certificateId,
             @RequestParam("file") MultipartFile file,
             Authentication authentication
@@ -35,6 +36,7 @@ public class CertificateSubmissionController {
         if (memberId == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         }
-        return certificateSubmissionService.submit(memberId, loanId, certificateId, file);
+        Long resolvedLoanApplicationId = loanApplicationId != null ? loanApplicationId : legacyLoanId;
+        return certificateSubmissionService.submit(memberId, resolvedLoanApplicationId, certificateId, file);
     }
 }
