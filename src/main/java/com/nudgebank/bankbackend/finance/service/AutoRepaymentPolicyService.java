@@ -131,7 +131,7 @@ public class AutoRepaymentPolicyService {
             ratio = ratio.subtract(new BigDecimal("0.05"));
         }
 
-        BigDecimal avgSpending = nullSafe(finalBaseline.getAvgSpending());
+        BigDecimal avgSpending = resolvePolicyAvgSpending(finalBaseline);
         BigDecimal volatility = nullSafe(finalBaseline.getVolatility());
         if (avgSpending.compareTo(ZERO) > 0) {
             BigDecimal volatilityRatio = volatility.divide(avgSpending, 4, RoundingMode.HALF_UP);
@@ -154,7 +154,7 @@ public class AutoRepaymentPolicyService {
         List<String> reasons = new ArrayList<>();
 
         BigDecimal availableBalance = nullSafe(financialStatus.getAvailableBalance());
-        BigDecimal avgSpending = nullSafe(finalBaseline.getAvgSpending());
+        BigDecimal avgSpending = resolvePolicyAvgSpending(finalBaseline);
         BigDecimal monthlyIncome = nullSafe(financialStatus.getMonthlyIncome());
         BigDecimal currentMonthSpendingAmount = nullSafe(financialStatus.getCurrentMonthSpendingAmount());
         BigDecimal totalLoanRemainingPrincipal = nullSafe(financialStatus.getTotalLoanRemainingPrincipal());
@@ -214,6 +214,17 @@ public class AutoRepaymentPolicyService {
                 : String.join(", ", reasons);
 
         return new PolicyOutcome(adjustedRatio, action, grade, reason);
+    }
+
+    private BigDecimal resolvePolicyAvgSpending(FinalBaselineResponse finalBaseline) {
+        BigDecimal personalAvgSpending = nullSafe(finalBaseline.getPersonalAvgSpending());
+        BigDecimal ageAvgSpending = nullSafe(finalBaseline.getAgeAvgSpending());
+
+        if (nullSafe(finalBaseline.getPersonalBaselineWeight()).compareTo(ZERO) > 0
+                && personalAvgSpending.compareTo(ZERO) > 0) {
+            return personalAvgSpending;
+        }
+        return ageAvgSpending;
     }
 
     private String resolveAction(BigDecimal ratio) {

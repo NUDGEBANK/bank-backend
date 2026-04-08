@@ -20,7 +20,8 @@ public class FinalBaselineResponse {
     private LocalDate baselineEndDate;
     private Integer usageDays;
 
-    private BigDecimal avgSpending;
+    private BigDecimal ageAvgSpending;
+    private BigDecimal personalAvgSpending;
     private BigDecimal essentialRatio;
     private BigDecimal normalRatio;
     private BigDecimal discretionaryRatio;
