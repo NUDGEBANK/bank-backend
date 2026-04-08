@@ -89,13 +89,15 @@ public class PersonalBaselineService {
                 .baselineStartDate(baselineStartDate)
                 .baselineEndDate(today)
                 .usageDays((int) ChronoUnit.DAYS.between(firstTransactionDate, today))
-                .avgSpending(weighted(ageBaseline.getAvgSpending(), personal.avgSpending(), weight))
+                .ageAvgSpending(ageBaseline.getAvgSpending())
+                .personalAvgSpending(personal.avgSpending())
                 .essentialRatio(weighted(ageBaseline.getEssentialRatio(), personal.essentialRatio(), weight))
                 .normalRatio(weighted(ageBaseline.getNormalRatio(), personal.normalRatio(), weight))
                 .discretionaryRatio(weighted(ageBaseline.getDiscretionaryRatio(), personal.discretionaryRatio(), weight))
                 .riskRatio(weighted(ageBaseline.getRiskRatio(), personal.riskRatio(), weight))
                 .volatility(weighted(ageBaseline.getVolatility(), personal.volatility(), weight))
                 .baselineSource(weight.personalWeight().compareTo(BigDecimal.ZERO) == 0 ? "AGE_ONLY"
+                        : weight.ageWeight().compareTo(BigDecimal.ZERO) == 0 ? "PERSONAL_ONLY"
                         : weight.personalWeight().compareTo(new BigDecimal("0.7")) >= 0 ? "PERSONAL_HEAVY"
                         : "MIXED")
                 .financialStatusResponse(financialStatus)
@@ -188,7 +190,8 @@ public class PersonalBaselineService {
                 .age(age)
                 .ageBaselineWeight(BigDecimal.ONE)
                 .personalBaselineWeight(BigDecimal.ZERO)
-                .avgSpending(baseline.getAvgSpending())
+                .ageAvgSpending(baseline.getAvgSpending())
+                .personalAvgSpending(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
                 .essentialRatio(baseline.getEssentialRatio())
                 .normalRatio(baseline.getNormalRatio())
                 .discretionaryRatio(baseline.getDiscretionaryRatio())
@@ -200,17 +203,23 @@ public class PersonalBaselineService {
     }
 
     private Weight resolveWeight(LocalDate firstTransactionDate, LocalDate today) {
-        long usageDays = Math.max(0, ChronoUnit.DAYS.between(firstTransactionDate, today));
-        if (usageDays < 30) {
-            return new Weight(new BigDecimal("0.9"), new BigDecimal("0.1"));
+        long usageMonths = Math.max(0, ChronoUnit.MONTHS.between(firstTransactionDate.withDayOfMonth(1), today.withDayOfMonth(1)));
+        if (usageMonths < 1) {
+            return new Weight(BigDecimal.ONE, BigDecimal.ZERO);
         }
-        if (usageDays < 90) {
+        if (usageMonths < 2) {
+            return new Weight(new BigDecimal("0.8"), new BigDecimal("0.2"));
+        }
+        if (usageMonths < 3) {
             return new Weight(new BigDecimal("0.6"), new BigDecimal("0.4"));
         }
-        if (usageDays < 180) {
-            return new Weight(new BigDecimal("0.3"), new BigDecimal("0.7"));
+        if (usageMonths < 4) {
+            return new Weight(new BigDecimal("0.4"), new BigDecimal("0.6"));
         }
-        return new Weight(new BigDecimal("0.1"), new BigDecimal("0.9"));
+        if (usageMonths < 5) {
+            return new Weight(new BigDecimal("0.2"), new BigDecimal("0.8"));
+        }
+        return new Weight(BigDecimal.ZERO, BigDecimal.ONE);
     }
 
     private BigDecimal weighted(BigDecimal ageValue, BigDecimal personalValue, Weight weight) {
