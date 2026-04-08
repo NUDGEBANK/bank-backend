@@ -24,4 +24,13 @@ public class MarketCategory {
 
   @Column(name = "mcc", nullable = false, length = 6)
   private String mcc;
+
+  private MarketCategory(String categoryName, String mcc) {
+    this.categoryName = categoryName;
+    this.mcc = mcc;
+  }
+
+  public static MarketCategory create(String categoryName, String mcc) {
+    return new MarketCategory(categoryName, mcc);
+  }
 }
