@@ -41,6 +41,7 @@ public class SecurityConfig {
             .requestMatchers("/api/finance-status/**").authenticated()
             .requestMatchers("/api/baselines/**").authenticated()
             .requestMatchers("/api/loan-applications/**").authenticated()
+            .requestMatchers("/api/loans/me/**").authenticated()
             .requestMatchers("/api/certificates/**").authenticated()
             .anyRequest().permitAll()
         );
