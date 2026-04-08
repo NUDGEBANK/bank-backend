@@ -106,10 +106,14 @@ public class LoanApplicationService {
     }
 
     private LoanApplicationSummaryResponse toSummary(LoanApplication loanApplication) {
-        boolean requiresCertificateSubmission =
+        boolean preferentialRateVerificationAvailable =
             SELF_DEVELOPMENT_TYPE.equals(loanApplication.getLoanProduct().getLoanProductType());
-        boolean certificateSubmitted = certificateSubmissionRepository
-            .existsByLoanApplicationId(loanApplication.getId());
+        var latestSubmission = certificateSubmissionRepository
+            .findTopByLoanApplicationIdOrderBySubmittedAtDescSubmissionIdDesc(loanApplication.getId());
+        boolean certificateSubmitted = latestSubmission.isPresent();
+        String preferentialRateVerificationStatus = latestSubmission
+            .map(submission -> submission.getVerificationStatus())
+            .orElse(null);
 
         return new LoanApplicationSummaryResponse(
             loanApplication.getId(),
@@ -117,8 +121,11 @@ public class LoanApplicationService {
             loanApplication.getLoanProduct().getLoanProductName(),
             loanApplication.getApplicationStatus(),
             loanApplication.getAppliedAt(),
-            requiresCertificateSubmission,
-            certificateSubmitted
+            preferentialRateVerificationAvailable,
+            certificateSubmitted,
+            preferentialRateVerificationAvailable,
+            certificateSubmitted,
+            preferentialRateVerificationStatus
         );
     }
 

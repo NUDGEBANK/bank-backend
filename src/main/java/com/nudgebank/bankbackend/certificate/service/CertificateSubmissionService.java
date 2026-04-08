@@ -38,11 +38,12 @@ public class CertificateSubmissionService {
     @Transactional
     public CertificateSubmissionResponse submit(
             Long memberId,
-            Long loanId,
+            Long loanApplicationId,
             Long certificateId,
             MultipartFile file
     ) {
-        validateRequest(memberId, loanId, certificateId, file);
+        validateRequest(memberId, loanApplicationId, certificateId, file);
+        validateDuplicateVerifiedCertificate(memberId, certificateId);
 
         OcrExtractResponse ocrResponse = ocrClient.extract(file);
         OffsetDateTime submittedAt = OffsetDateTime.now();
@@ -56,7 +57,7 @@ public class CertificateSubmissionService {
 
         CertificateSubmission submission = CertificateSubmission.builder()
                 .memberId(memberId)
-                .loanApplicationId(loanId)
+                .loanApplicationId(loanApplicationId)
                 .certificateId(certificateId)
                 .fileUrl(file.getOriginalFilename())
                 .ocrText(ocrResponse.extractedText())
@@ -82,16 +83,29 @@ public class CertificateSubmissionService {
 
     private void validateRequest(
             Long memberId,
-            Long loanId,
+            Long loanApplicationId,
             Long certificateId,
             MultipartFile file
     ) {
-        if (memberId == null || loanId == null || certificateId == null) {
-            throw new InvalidCertificateUploadException("memberId, loanId, certificateId are required");
+        if (memberId == null || loanApplicationId == null || certificateId == null) {
+            throw new InvalidCertificateUploadException("memberId, loanApplicationId, certificateId are required");
         }
 
         if (file == null || file.isEmpty()) {
             throw new InvalidCertificateUploadException("Certificate file is required");
+        }
+    }
+
+    private void validateDuplicateVerifiedCertificate(Long memberId, Long certificateId) {
+        boolean alreadyVerified = certificateSubmissionRepository
+                .existsByMemberIdAndCertificateIdAndVerificationStatus(
+                        memberId,
+                        certificateId,
+                        "VERIFIED"
+                );
+
+        if (alreadyVerified) {
+            throw new IllegalArgumentException("이미 인증 완료된 자격증입니다.");
         }
     }
 }
