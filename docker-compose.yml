@@ -44,6 +44,14 @@ services:
     networks:
       - nudge-net
 
+  bank-ocr:
+    build: ../bank-ocr
+    container_name: nudge-bank-ocr
+    environment:
+      - TZ=Asia/Seoul
+    networks:
+      - nudge-net
+
 networks:
   nudge-net:
 
