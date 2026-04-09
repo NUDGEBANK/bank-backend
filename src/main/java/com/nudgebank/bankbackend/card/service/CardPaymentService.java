@@ -94,7 +94,7 @@ public class CardPaymentService {
                 .autoRepaymentApplied(autoRepaymentResult.autoRepaymentApplied())
                 .repaymentAction(autoRepaymentResult.repaymentAction())
                 .policyGrade(autoRepaymentResult.policyGrade())
-                .repaymentRatio(autoRepaymentResult.repaymentRatio())
+                .repaymentRate(autoRepaymentResult.repaymentRate())
                 .repaymentAmount(autoRepaymentResult.repaymentAmount())
                 .remainingLoanBalance(autoRepaymentResult.remainingLoanBalance())
                 .totalDebitedAmount(totalDebitedAmount)

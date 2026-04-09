@@ -106,7 +106,7 @@ public class AutoRepaymentExecutionService {
             boolean autoRepaymentApplied,
             String repaymentAction,
             String policyGrade,
-            BigDecimal repaymentRatio,
+            BigDecimal repaymentRate,
             BigDecimal repaymentAmount,
             BigDecimal remainingLoanBalance
     ) {
@@ -138,15 +138,17 @@ public class AutoRepaymentExecutionService {
                 BigDecimal remainingLoanBalance,
                 boolean applied
         ) {
-            BigDecimal repaymentRatio = decision.getFinalRepaymentRatio() == null
-                    ? BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP)
-                    : decision.getFinalRepaymentRatio().setScale(4, RoundingMode.HALF_UP);
+            BigDecimal repaymentRate = decision.getFinalRepaymentRatio() == null
+                    ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+                    : decision.getFinalRepaymentRatio()
+                    .multiply(ONE_HUNDRED)
+                    .setScale(2, RoundingMode.HALF_UP);
 
             return new AutoRepaymentExecutionResult(
                     applied,
                     decision.getRepaymentAction(),
                     decision.getPolicyGrade(),
-                    repaymentRatio,
+                    repaymentRate,
                     repaymentAmount,
                     remainingLoanBalance
             );
