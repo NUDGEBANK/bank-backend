@@ -28,4 +28,13 @@ public class Market {
 
   @Column(name = "market_name", nullable = false, length = 100)
   private String marketName;
+
+  private Market(MarketCategory category, String marketName) {
+    this.category = category;
+    this.marketName = marketName;
+  }
+
+  public static Market create(MarketCategory category, String marketName) {
+    return new Market(category, marketName);
+  }
 }

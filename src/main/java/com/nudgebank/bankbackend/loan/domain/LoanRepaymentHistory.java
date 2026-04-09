@@ -40,38 +40,4 @@ public class LoanRepaymentHistory {
 
     @Column(name = "remaining_balance", precision = 15, scale = 2)
     private BigDecimal remainingBalance;
-
-    private LoanRepaymentHistory(
-            LoanHistory loanHistory,
-            CardTransaction transaction,
-            BigDecimal repaymentAmount,
-            BigDecimal repaymentRate,
-            OffsetDateTime repaymentDatetime,
-            BigDecimal remainingBalance
-    ) {
-        this.loanHistory = loanHistory;
-        this.transaction = transaction;
-        this.repaymentAmount = repaymentAmount;
-        this.repaymentRate = repaymentRate;
-        this.repaymentDatetime = repaymentDatetime;
-        this.remainingBalance = remainingBalance;
-    }
-
-    public static LoanRepaymentHistory create(
-            LoanHistory loanHistory,
-            CardTransaction transaction,
-            BigDecimal repaymentAmount,
-            BigDecimal repaymentRate,
-            OffsetDateTime repaymentDatetime,
-            BigDecimal remainingBalance
-    ) {
-        return new LoanRepaymentHistory(
-                loanHistory,
-                transaction,
-                repaymentAmount,
-                repaymentRate,
-                repaymentDatetime,
-                remainingBalance
-        );
-    }
 }
