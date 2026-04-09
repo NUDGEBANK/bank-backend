@@ -1,22 +1,13 @@
 package com.nudgebank.bankbackend.loan.domain;
 
 import com.nudgebank.bankbackend.card.domain.CardTransaction;
-import jakarta.persistence.Access;
-import jakarta.persistence.AccessType;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
-import java.math.BigDecimal;
-import java.time.OffsetDateTime;
+import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+
+import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 
 @Entity
 @Table(name = "loan_repayment_history")
@@ -50,6 +41,37 @@ public class LoanRepaymentHistory {
     @Column(name = "remaining_balance", precision = 15, scale = 2)
     private BigDecimal remainingBalance;
 
-    @Column(name = "\"Key\"")
-    private String recordKey;
+    private LoanRepaymentHistory(
+            LoanHistory loanHistory,
+            CardTransaction transaction,
+            BigDecimal repaymentAmount,
+            BigDecimal repaymentRate,
+            OffsetDateTime repaymentDatetime,
+            BigDecimal remainingBalance
+    ) {
+        this.loanHistory = loanHistory;
+        this.transaction = transaction;
+        this.repaymentAmount = repaymentAmount;
+        this.repaymentRate = repaymentRate;
+        this.repaymentDatetime = repaymentDatetime;
+        this.remainingBalance = remainingBalance;
+    }
+
+    public static LoanRepaymentHistory create(
+            LoanHistory loanHistory,
+            CardTransaction transaction,
+            BigDecimal repaymentAmount,
+            BigDecimal repaymentRate,
+            OffsetDateTime repaymentDatetime,
+            BigDecimal remainingBalance
+    ) {
+        return new LoanRepaymentHistory(
+                loanHistory,
+                transaction,
+                repaymentAmount,
+                repaymentRate,
+                repaymentDatetime,
+                remainingBalance
+        );
+    }
 }

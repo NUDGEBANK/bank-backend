@@ -53,4 +53,25 @@ public class LoanHistory {
 
     @Column(name = "created_at")
     private OffsetDateTime createdAt;
+
+    public BigDecimal applyRepayment(BigDecimal repaymentAmount) {
+        if (repaymentAmount == null || repaymentAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("상환 금액은 0보다 커야 합니다.");
+        }
+
+        BigDecimal currentRemainingPrincipal = this.remainingPrincipal != null
+                ? this.remainingPrincipal
+                : BigDecimal.ZERO;
+
+        BigDecimal appliedAmount = repaymentAmount.min(currentRemainingPrincipal);
+        this.remainingPrincipal = currentRemainingPrincipal.subtract(appliedAmount);
+
+        if (this.remainingPrincipal.compareTo(BigDecimal.ZERO) <= 0) {
+            this.remainingPrincipal = BigDecimal.ZERO;
+            this.status = "COMPLETED";
+            this.expectedRepaymentDate = LocalDate.now();
+        }
+
+        return appliedAmount;
+    }
 }
