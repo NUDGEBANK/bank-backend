@@ -11,8 +11,6 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,7 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AuthService {
   public record TokenPair(String accessToken, String refreshToken, String rid, long accessTtlSeconds, long refreshTtlSeconds) {}
-  private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
   private final MemberRepository memberRepository;
   private final RefreshTokenRepository refreshTokenRepository;
@@ -92,24 +89,21 @@ public class AuthService {
     return passwordEncoder.matches(password, member.get().getPassword());
   }
 
+  @Transactional
   public TokenPair issueTokens(Long memberId) {
     String rid = UUID.randomUUID().toString().replace("-", "");
     String accessToken = jwtProvider.createAccessToken(memberId);
     String refreshToken = jwtProvider.createRefreshToken(memberId, rid);
 
-    try {
-      refreshTokenRepository.deleteByMemberId(memberId);
-      refreshTokenRepository.save(
-          RefreshToken.create(
-              rid,
-              memberId,
-              refreshToken,
-              Instant.now().plusSeconds(jwtProvider.getRefreshTtlSeconds())
-          )
-      );
-    } catch (RuntimeException ex) {
-      log.warn("Refresh token persistence failed for memberId={}", memberId, ex);
-    }
+    refreshTokenRepository.deleteByMemberId(memberId);
+    refreshTokenRepository.saveAndFlush(
+        RefreshToken.create(
+            rid,
+            memberId,
+            refreshToken,
+            Instant.now().plusSeconds(jwtProvider.getRefreshTtlSeconds())
+        )
+    );
 
     return new TokenPair(
         accessToken,

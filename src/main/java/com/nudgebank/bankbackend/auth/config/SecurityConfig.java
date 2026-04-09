@@ -2,6 +2,7 @@ package com.nudgebank.bankbackend.auth.config;
 
 import com.nudgebank.bankbackend.auth.security.JwtAuthFilter;
 import com.nudgebank.bankbackend.auth.security.JwtProvider;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -34,6 +35,11 @@ public class SecurityConfig {
         .formLogin(form -> form.disable())
         .httpBasic(basic -> basic.disable())
         .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+        .exceptionHandling(ex -> ex.authenticationEntryPoint((req, res, authEx) -> {
+          res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+          res.setContentType("application/json;charset=UTF-8");
+          res.getWriter().write("{\"message\":\"UNAUTHORIZED\"}");
+        }))
         .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(auth -> auth
             .requestMatchers("/api/auth/**").permitAll()
