@@ -70,30 +70,25 @@ public class AuthController {
   public ResponseEntity<AuthResponse> refresh(HttpServletRequest req, HttpServletResponse res) {
     String rt = CookieUtil.getCookieValue(req, RT_COOKIE);
     if (rt == null || rt.isBlank()) {
-      clearAuthCookies(res);
       return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new AuthResponse(false, "NO_REFRESH"));
     }
 
     if (!jwtProvider.isValid(rt)) {
-      clearAuthCookies(res);
       return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new AuthResponse(false, "INVALID_REFRESH"));
     }
 
     Claims claims = jwtProvider.parseClaims(rt);
     String rid = claims.getId();
     if (rid == null || rid.isBlank()) {
-      clearAuthCookies(res);
       return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new AuthResponse(false, "RID_MISSING"));
     }
 
     RefreshToken stored = authService.findRefreshToken(rid).orElse(null);
     if (stored == null || !stored.getToken().equals(rt)) {
-      clearAuthCookies(res);
       return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new AuthResponse(false, "REFRESH_MISMATCH"));
     }
     if (stored.getExpiresAt().isBefore(Instant.now())) {
       authService.deleteRefreshTokenByRid(rid);
-      clearAuthCookies(res);
       return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new AuthResponse(false, "REFRESH_EXPIRED"));
     }
 
