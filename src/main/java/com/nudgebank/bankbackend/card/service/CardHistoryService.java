@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -77,10 +78,9 @@ public class CardHistoryService {
         .findByTransaction_TransactionIdIn(
             transactions.stream().map(CardTransaction::getTransactionId).toList()
         ).stream()
-        .collect(java.util.stream.Collectors.toMap(
+        .collect(Collectors.toMap(
             history -> history.getTransaction().getTransactionId(),
-            Function.identity(),
-            (existing, replacement) -> existing
+            Function.identity()
         ));
 
     return new CardHistoryResponse.CardHistoryAccountDto(
