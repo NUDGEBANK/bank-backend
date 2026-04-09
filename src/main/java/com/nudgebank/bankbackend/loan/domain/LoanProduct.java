@@ -54,9 +54,6 @@ public class LoanProduct {
     @Column(name = "repayment_type", length = 50)
     private String repaymentType;
 
-    @Column(name = "target_customer", length = 50)
-    private String targetCustomer;
-
     @OneToMany(mappedBy = "loanProduct")
     @Builder.Default
     private List<LoanApplication> loanApplications = new ArrayList<>();
