@@ -1,25 +1,22 @@
 package com.nudgebank.bankbackend.loan.service;
 
-import com.nudgebank.bankbackend.loan.domain.LoanHistory;
 import com.nudgebank.bankbackend.loan.domain.Loan;
 import com.nudgebank.bankbackend.loan.domain.LoanApplication;
+import com.nudgebank.bankbackend.loan.domain.LoanHistory;
 import com.nudgebank.bankbackend.loan.domain.RepaymentSchedule;
 import com.nudgebank.bankbackend.loan.dto.MyLoanRepaymentHistoryResponse;
 import com.nudgebank.bankbackend.loan.dto.MyLoanRepaymentScheduleResponse;
 import com.nudgebank.bankbackend.loan.dto.MyLoanSummaryResponse;
-import com.nudgebank.bankbackend.loan.repository.LoanApplicationRepository;
-import com.nudgebank.bankbackend.loan.repository.LoanHistoryRepository;
-import com.nudgebank.bankbackend.loan.repository.LoanRepository;
-import com.nudgebank.bankbackend.loan.repository.LoanRepaymentHistoryRepository;
-import com.nudgebank.bankbackend.loan.repository.RepaymentScheduleRepository;
+import com.nudgebank.bankbackend.loan.repository.*;
 import jakarta.persistence.EntityNotFoundException;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -148,7 +145,7 @@ public class MyLoanManagementService {
 
     private LoanApplication ensureDisplayableLoanExists(Long memberId) {
         return loanApplicationRepository.findTopByMember_MemberIdOrderByAppliedAtDesc(memberId)
-            .orElseThrow(() -> new EntityNotFoundException("?異?愿由??뺣낫媛 ?놁뒿?덈떎."));
+            .orElseThrow(() -> new EntityNotFoundException("대출 상품이 없습니다."));
     }
 
     private LoanHistory getLatestLoanHistory(Long memberId) {
