@@ -50,6 +50,4 @@ public class LoanRepaymentHistory {
     @Column(name = "remaining_balance", precision = 15, scale = 2)
     private BigDecimal remainingBalance;
 
-    @Column(name = "\"Key\"")
-    private String recordKey;
 }
