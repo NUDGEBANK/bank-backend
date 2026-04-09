@@ -29,7 +29,12 @@ public record CardHistoryResponse(
       BigDecimal amount,
       String transactionDatetime,
       String menuName,
-      Integer quantity
+      Integer quantity,
+      Boolean autoRepaymentApplied,
+      BigDecimal repaymentRate,
+      BigDecimal repaymentAmount,
+      String repaymentDatetime,
+      BigDecimal remainingLoanBalance
   ) {
   }
 }

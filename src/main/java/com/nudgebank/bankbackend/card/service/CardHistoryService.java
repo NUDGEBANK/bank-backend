@@ -7,13 +7,17 @@ import com.nudgebank.bankbackend.card.domain.CardTransaction;
 import com.nudgebank.bankbackend.card.dto.CardHistoryResponse;
 import com.nudgebank.bankbackend.card.repository.CardRepository;
 import com.nudgebank.bankbackend.card.repository.CardTransactionRepository;
+import com.nudgebank.bankbackend.loan.domain.LoanRepaymentHistory;
+import com.nudgebank.bankbackend.loan.repository.LoanRepaymentHistoryRepository;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -23,15 +27,18 @@ public class CardHistoryService {
   private final AccountRepository accountRepository;
   private final CardRepository cardRepository;
   private final CardTransactionRepository cardTransactionRepository;
+  private final LoanRepaymentHistoryRepository loanRepaymentHistoryRepository;
 
   public CardHistoryService(
       AccountRepository accountRepository,
       CardRepository cardRepository,
-      CardTransactionRepository cardTransactionRepository
+      CardTransactionRepository cardTransactionRepository,
+      LoanRepaymentHistoryRepository loanRepaymentHistoryRepository
   ) {
     this.accountRepository = accountRepository;
     this.cardRepository = cardRepository;
     this.cardTransactionRepository = cardTransactionRepository;
+    this.loanRepaymentHistoryRepository = loanRepaymentHistoryRepository;
   }
 
   public CardHistoryResponse getHistory(Long userId) {
@@ -66,6 +73,15 @@ public class CardHistoryService {
     Card card = cardOptional.get();
     List<CardTransaction> transactions =
         cardTransactionRepository.findByCardCardIdOrderByTransactionDatetimeDesc(card.getCardId());
+    Map<Long, LoanRepaymentHistory> repaymentHistoryByTransactionId = loanRepaymentHistoryRepository
+        .findByTransaction_TransactionIdIn(
+            transactions.stream().map(CardTransaction::getTransactionId).toList()
+        ).stream()
+        .collect(java.util.stream.Collectors.toMap(
+            history -> history.getTransaction().getTransactionId(),
+            Function.identity(),
+            (existing, replacement) -> existing
+        ));
 
     return new CardHistoryResponse.CardHistoryAccountDto(
         account.getAccountId(),
@@ -77,15 +93,24 @@ public class CardHistoryService {
         card.getExpiredYm(),
         card.getStatus(),
         calculateSpentThisMonth(card.getCardId()),
-        transactions.stream().map(this::toTransactionDto).toList()
+        transactions.stream().map(transaction -> toTransactionDto(
+            transaction,
+            repaymentHistoryByTransactionId.get(transaction.getTransactionId())
+        )).toList()
     );
   }
 
-  private CardHistoryResponse.CardHistoryTransactionDto toTransactionDto(CardTransaction transaction) {
+  private CardHistoryResponse.CardHistoryTransactionDto toTransactionDto(
+      CardTransaction transaction,
+      LoanRepaymentHistory repaymentHistory
+  ) {
     OffsetDateTime transactionDateTime = transaction.getTransactionDatetime();
     String formattedDateTime = transactionDateTime == null
         ? null
         : transactionDateTime.withOffsetSameInstant(ZoneOffset.ofHours(9)).format(DATE_TIME_FORMATTER);
+    String formattedRepaymentDateTime = repaymentHistory == null || repaymentHistory.getRepaymentDatetime() == null
+        ? null
+        : repaymentHistory.getRepaymentDatetime().withOffsetSameInstant(ZoneOffset.ofHours(9)).format(DATE_TIME_FORMATTER);
 
     return new CardHistoryResponse.CardHistoryTransactionDto(
         transaction.getTransactionId(),
@@ -94,7 +119,12 @@ public class CardHistoryService {
         transaction.getAmount(),
         formattedDateTime,
         transaction.getMenuName(),
-        transaction.getQuantity()
+        transaction.getQuantity(),
+        repaymentHistory != null,
+        repaymentHistory != null ? repaymentHistory.getRepaymentRate() : BigDecimal.ZERO,
+        repaymentHistory != null ? repaymentHistory.getRepaymentAmount() : BigDecimal.ZERO,
+        formattedRepaymentDateTime,
+        repaymentHistory != null ? repaymentHistory.getRemainingBalance() : null
     );
   }
 
