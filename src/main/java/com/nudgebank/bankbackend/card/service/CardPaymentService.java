@@ -7,10 +7,13 @@ import com.nudgebank.bankbackend.card.domain.CardTransaction;
 import com.nudgebank.bankbackend.card.domain.Market;
 import com.nudgebank.bankbackend.card.domain.MarketCategory;
 import com.nudgebank.bankbackend.card.dto.CardPaymentRequest;
+import com.nudgebank.bankbackend.card.dto.CardPaymentResponse;
 import com.nudgebank.bankbackend.card.repository.CardRepository;
 import com.nudgebank.bankbackend.card.repository.CardTransactionRepository;
 import com.nudgebank.bankbackend.card.repository.MarketCategoryRepository;
 import com.nudgebank.bankbackend.card.repository.MarketRepository;
+import com.nudgebank.bankbackend.finance.service.AutoRepaymentExecutionService.AutoRepaymentExecutionResult;
+import com.nudgebank.bankbackend.finance.service.AutoRepaymentExecutionService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -29,8 +32,9 @@ public class CardPaymentService {
     private final MarketRepository marketRepository;
     private final MarketCategoryRepository marketCategoryRepository;
     private final CardTransactionRepository cardTransactionRepository;
+    private final AutoRepaymentExecutionService autoRepaymentExecutionService;
 
-    public Long processPayment(CardPaymentRequest request) {
+    public CardPaymentResponse processPayment(CardPaymentRequest request) {
         validateRequest(request);
 
         Card card = cardRepository.findById(request.cardId())
@@ -75,7 +79,26 @@ public class CardPaymentService {
                 .build();
 
         CardTransaction saved = cardTransactionRepository.save(transaction);
-        return saved.getTransactionId();
+        AutoRepaymentExecutionResult autoRepaymentResult;
+        try {
+            autoRepaymentResult = autoRepaymentExecutionService.executeAfterPayment(account.getMemberId(), saved);
+        } catch (RuntimeException exception) {
+            autoRepaymentResult = AutoRepaymentExecutionResult.failed();
+        }
+
+        BigDecimal totalDebitedAmount = request.amount().add(autoRepaymentResult.repaymentAmount());
+
+        return CardPaymentResponse.builder()
+                .transactionId(saved.getTransactionId())
+                .paymentAmount(request.amount())
+                .autoRepaymentApplied(autoRepaymentResult.autoRepaymentApplied())
+                .repaymentAction(autoRepaymentResult.repaymentAction())
+                .policyGrade(autoRepaymentResult.policyGrade())
+                .repaymentRate(autoRepaymentResult.repaymentRate())
+                .repaymentAmount(autoRepaymentResult.repaymentAmount())
+                .remainingLoanBalance(autoRepaymentResult.remainingLoanBalance())
+                .totalDebitedAmount(totalDebitedAmount)
+                .build();
     }
 
     private void validateRequest(CardPaymentRequest request) {
