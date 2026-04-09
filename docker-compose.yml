@@ -38,9 +38,17 @@ services:
     build: ../bank-frontend
     container_name: nudge-bank-frontend
     ports:
-      - "81:80"
+      - "80:80"
     depends_on:
       - bank-backend
+    networks:
+      - nudge-net
+
+  bank-ocr:
+    build: ../bank-ocr
+    container_name: nudge-bank-ocr
+    environment:
+      - TZ=Asia/Seoul
     networks:
       - nudge-net
 

@@ -54,6 +54,32 @@ public class LoanHistory {
     @Column(name = "created_at")
     private OffsetDateTime createdAt;
 
+    public static LoanHistory create(
+        Member member,
+        Card card,
+        BigDecimal totalPrincipal,
+        String repaymentAccountNumber,
+        BigDecimal remainingPrincipal,
+        LocalDate startDate,
+        LocalDate endDate,
+        String status,
+        LocalDate expectedRepaymentDate,
+        OffsetDateTime createdAt
+    ) {
+        return LoanHistory.builder()
+            .member(member)
+            .card(card)
+            .totalPrincipal(totalPrincipal)
+            .repaymentAccountNumber(repaymentAccountNumber)
+            .remainingPrincipal(remainingPrincipal)
+            .startDate(startDate)
+            .endDate(endDate)
+            .status(status)
+            .expectedRepaymentDate(expectedRepaymentDate)
+            .createdAt(createdAt)
+            .build();
+    }
+
     public BigDecimal applyRepayment(BigDecimal repaymentAmount) {
         if (repaymentAmount == null || repaymentAmount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("상환 금액은 0보다 커야 합니다.");
