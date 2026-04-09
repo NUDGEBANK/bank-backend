@@ -69,7 +69,7 @@ public class LoanHistory {
         if (this.remainingPrincipal.compareTo(BigDecimal.ZERO) <= 0) {
             this.remainingPrincipal = BigDecimal.ZERO;
             this.status = "COMPLETED";
-            this.expectedRepaymentDate = LocalDate.now();
+            this.endDate = LocalDate.now();
         }
 
         return appliedAmount;
