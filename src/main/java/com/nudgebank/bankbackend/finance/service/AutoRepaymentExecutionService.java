@@ -13,11 +13,11 @@ import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-@Transactional
 public class AutoRepaymentExecutionService {
 
     private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
@@ -28,6 +28,7 @@ public class AutoRepaymentExecutionService {
     private final LoanRepaymentHistoryRepository loanRepaymentHistoryRepository;
     private final AccountRepository accountRepository;
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public AutoRepaymentExecutionResult executeAfterPayment(Long memberId, CardTransaction transaction) {
         LoanHistory loanHistory = loanHistoryRepository
                 .findByCard_CardIdAndStatus(transaction.getCard().getCardId(), "ACTIVE")
@@ -110,7 +111,7 @@ public class AutoRepaymentExecutionService {
             BigDecimal repaymentAmount,
             BigDecimal remainingLoanBalance
     ) {
-        private static AutoRepaymentExecutionResult notApplied() {
+        public static AutoRepaymentExecutionResult notApplied() {
             return new AutoRepaymentExecutionResult(
                     false,
                     null,
@@ -121,7 +122,18 @@ public class AutoRepaymentExecutionService {
             );
         }
 
-        private static AutoRepaymentExecutionResult fromDecision(
+        public static AutoRepaymentExecutionResult failed() {
+            return new AutoRepaymentExecutionResult(
+                    false,
+                    "HOLD",
+                    "FAILED",
+                    BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
+                    BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
+                    null
+            );
+        }
+
+        public static AutoRepaymentExecutionResult fromDecision(
                 AutoRepaymentDecisionResponse decision,
                 BigDecimal repaymentAmount,
                 BigDecimal remainingLoanBalance,

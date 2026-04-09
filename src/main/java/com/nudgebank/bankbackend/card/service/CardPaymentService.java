@@ -79,8 +79,12 @@ public class CardPaymentService {
                 .build();
 
         CardTransaction saved = cardTransactionRepository.save(transaction);
-        AutoRepaymentExecutionResult autoRepaymentResult =
-                autoRepaymentExecutionService.executeAfterPayment(account.getMemberId(), saved);
+        AutoRepaymentExecutionResult autoRepaymentResult;
+        try {
+            autoRepaymentResult = autoRepaymentExecutionService.executeAfterPayment(account.getMemberId(), saved);
+        } catch (RuntimeException exception) {
+            autoRepaymentResult = AutoRepaymentExecutionResult.failed();
+        }
 
         BigDecimal totalDebitedAmount = request.amount().add(autoRepaymentResult.repaymentAmount());
 
