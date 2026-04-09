@@ -24,6 +24,7 @@ public class LoanProductInitializer implements CommandLineRunner {
                 "SELF_DEVELOPMENT",
                 "자기계발 대출",
                 "자격증 및 역량개발 지원 대출",
+                "자격증 취득과 직무 역량 개발이 필요한 청년 고객",
                 new BigDecimal("3.50"),
                 new BigDecimal("5.50"),
                 3_000_000L,
@@ -35,6 +36,7 @@ public class LoanProductInitializer implements CommandLineRunner {
                 "CONSUMPTION_ANALYSIS",
                 "소비분석 대출",
                 "소비패턴 기반 맞춤 대출",
+                "소비 흐름 관리가 필요한 고객",
                 new BigDecimal("4.00"),
                 new BigDecimal("6.50"),
                 5_000_000L,
@@ -46,6 +48,7 @@ public class LoanProductInitializer implements CommandLineRunner {
                 "EMERGENCY",
                 "긴급 대출",
                 "긴급 생활안정 자금 대출",
+                "단기 긴급 자금이 필요한 고객",
                 new BigDecimal("5.00"),
                 new BigDecimal("8.00"),
                 2_000_000L,
@@ -61,6 +64,7 @@ public class LoanProductInitializer implements CommandLineRunner {
                     existing -> existing.updateProduct(
                         seed.loanProductName(),
                         seed.loanProductDescription(),
+                        seed.targetCustomer(),
                         seed.minInterestRate(),
                         seed.maxInterestRate(),
                         seed.maxLimitAmount(),
@@ -73,6 +77,7 @@ public class LoanProductInitializer implements CommandLineRunner {
                             .loanProductType(seed.loanProductType())
                             .loanProductName(seed.loanProductName())
                             .loanProductDescription(seed.loanProductDescription())
+                            .targetCustomer(seed.targetCustomer())
                             .minInterestRate(seed.minInterestRate())
                             .maxInterestRate(seed.maxInterestRate())
                             .maxLimitAmount(seed.maxLimitAmount())
@@ -90,6 +95,7 @@ public class LoanProductInitializer implements CommandLineRunner {
         String loanProductType,
         String loanProductName,
         String loanProductDescription,
+        String targetCustomer,
         BigDecimal minInterestRate,
         BigDecimal maxInterestRate,
         Long maxLimitAmount,

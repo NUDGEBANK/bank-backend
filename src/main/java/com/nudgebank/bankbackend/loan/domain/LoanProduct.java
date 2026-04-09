@@ -27,6 +27,9 @@ public class LoanProduct {
     @Column(name = "loan_product_description", columnDefinition = "TEXT")
     private String loanProductDescription;
 
+    @Column(name = "target_customer", length = 200)
+    private String targetCustomer;
+
     @Column(name = "min_interest_rate", precision = 5, scale = 2)
     private BigDecimal minInterestRate;
 
@@ -58,6 +61,7 @@ public class LoanProduct {
     public void updateProduct(
         String loanProductName,
         String loanProductDescription,
+        String targetCustomer,
         BigDecimal minInterestRate,
         BigDecimal maxInterestRate,
         Long maxLimitAmount,
@@ -67,6 +71,7 @@ public class LoanProduct {
     ) {
         this.loanProductName = loanProductName;
         this.loanProductDescription = loanProductDescription;
+        this.targetCustomer = targetCustomer;
         this.minInterestRate = minInterestRate;
         this.maxInterestRate = maxInterestRate;
         this.maxLimitAmount = maxLimitAmount;
