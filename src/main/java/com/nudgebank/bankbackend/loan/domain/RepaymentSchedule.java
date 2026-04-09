@@ -54,4 +54,22 @@ public class RepaymentSchedule {
     @Column(name = "overdue_days")
     private Integer overdueDays;
 
+    public static RepaymentSchedule create(
+        LoanHistory loanHistory,
+        LocalDate dueDate,
+        BigDecimal plannedPrincipal,
+        BigDecimal plannedInterest
+    ) {
+        RepaymentSchedule schedule = new RepaymentSchedule();
+        schedule.loanHistory = loanHistory;
+        schedule.dueDate = dueDate;
+        schedule.plannedPrincipal = plannedPrincipal;
+        schedule.plannedInterest = plannedInterest;
+        schedule.paidPrincipal = BigDecimal.ZERO;
+        schedule.paidInterest = BigDecimal.ZERO;
+        schedule.isSettled = false;
+        schedule.overdueDays = 0;
+        return schedule;
+    }
+
 }
