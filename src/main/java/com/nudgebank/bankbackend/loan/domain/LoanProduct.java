@@ -54,4 +54,24 @@ public class LoanProduct {
     @OneToMany(mappedBy = "loanProduct")
     @Builder.Default
     private List<LoanApplication> loanApplications = new ArrayList<>();
+
+    public void updateProduct(
+        String loanProductName,
+        String loanProductDescription,
+        BigDecimal minInterestRate,
+        BigDecimal maxInterestRate,
+        Long maxLimitAmount,
+        Long minLimitAmount,
+        Integer repaymentPeriodMonth,
+        String repaymentType
+    ) {
+        this.loanProductName = loanProductName;
+        this.loanProductDescription = loanProductDescription;
+        this.minInterestRate = minInterestRate;
+        this.maxInterestRate = maxInterestRate;
+        this.maxLimitAmount = maxLimitAmount;
+        this.minLimitAmount = minLimitAmount;
+        this.repaymentPeriodMonth = repaymentPeriodMonth;
+        this.repaymentType = repaymentType;
+    }
 }
