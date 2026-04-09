@@ -13,7 +13,6 @@ import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -28,7 +27,7 @@ public class AutoRepaymentExecutionService {
     private final LoanRepaymentHistoryRepository loanRepaymentHistoryRepository;
     private final AccountRepository accountRepository;
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public AutoRepaymentExecutionResult executeAfterPayment(Long memberId, CardTransaction transaction) {
         LoanHistory loanHistory = loanHistoryRepository
                 .findByCard_CardIdAndStatus(transaction.getCard().getCardId(), "ACTIVE")
@@ -107,7 +106,7 @@ public class AutoRepaymentExecutionService {
             boolean autoRepaymentApplied,
             String repaymentAction,
             String policyGrade,
-            BigDecimal repaymentRate,
+            BigDecimal repaymentRatio,
             BigDecimal repaymentAmount,
             BigDecimal remainingLoanBalance
     ) {
@@ -116,7 +115,7 @@ public class AutoRepaymentExecutionService {
                     false,
                     null,
                     null,
-                    BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
+                    BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP),
                     BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
                     null
             );
@@ -127,7 +126,7 @@ public class AutoRepaymentExecutionService {
                     false,
                     "HOLD",
                     "FAILED",
-                    BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
+                    BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP),
                     BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
                     null
             );
@@ -139,15 +138,15 @@ public class AutoRepaymentExecutionService {
                 BigDecimal remainingLoanBalance,
                 boolean applied
         ) {
-            BigDecimal repaymentRate = decision.getFinalRepaymentRatio() == null
-                    ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
-                    : decision.getFinalRepaymentRatio().multiply(ONE_HUNDRED).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal repaymentRatio = decision.getFinalRepaymentRatio() == null
+                    ? BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP)
+                    : decision.getFinalRepaymentRatio().setScale(4, RoundingMode.HALF_UP);
 
             return new AutoRepaymentExecutionResult(
                     applied,
                     decision.getRepaymentAction(),
                     decision.getPolicyGrade(),
-                    repaymentRate,
+                    repaymentRatio,
                     repaymentAmount,
                     remainingLoanBalance
             );
