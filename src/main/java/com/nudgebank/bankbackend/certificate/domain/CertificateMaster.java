@@ -35,4 +35,50 @@ public class CertificateMaster {
 
     @Column(name = "created_at")
     private OffsetDateTime createdAt;
+
+    private CertificateMaster(
+        Long certificateId,
+        String certificateName,
+        String issuerName,
+        BigDecimal rateDiscount,
+        Boolean isActive,
+        OffsetDateTime createdAt
+    ) {
+        this.certificateId = certificateId;
+        this.certificateName = certificateName;
+        this.issuerName = issuerName;
+        this.rateDiscount = rateDiscount;
+        this.isActive = isActive;
+        this.createdAt = createdAt;
+    }
+
+    public static CertificateMaster create(
+        Long certificateId,
+        String certificateName,
+        String issuerName,
+        BigDecimal rateDiscount,
+        Boolean isActive,
+        OffsetDateTime createdAt
+    ) {
+        return new CertificateMaster(
+            certificateId,
+            certificateName,
+            issuerName,
+            rateDiscount,
+            isActive,
+            createdAt
+        );
+    }
+
+    public void updateMaster(
+        String certificateName,
+        String issuerName,
+        BigDecimal rateDiscount,
+        Boolean isActive
+    ) {
+        this.certificateName = certificateName;
+        this.issuerName = issuerName;
+        this.rateDiscount = rateDiscount;
+        this.isActive = isActive;
+    }
 }
