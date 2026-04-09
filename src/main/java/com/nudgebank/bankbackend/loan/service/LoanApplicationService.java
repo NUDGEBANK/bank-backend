@@ -1,10 +1,9 @@
 package com.nudgebank.bankbackend.loan.service;
 
-import com.nudgebank.bankbackend.account.repository.AccountRepository;
 import com.nudgebank.bankbackend.account.domain.Account;
+import com.nudgebank.bankbackend.account.repository.AccountRepository;
 import com.nudgebank.bankbackend.auth.domain.Member;
 import com.nudgebank.bankbackend.auth.repository.MemberRepository;
-import com.nudgebank.bankbackend.certificate.repository.CertificateSubmissionRepository;
 import com.nudgebank.bankbackend.card.domain.Card;
 import com.nudgebank.bankbackend.card.domain.CardTransaction;
 import com.nudgebank.bankbackend.card.domain.Market;
@@ -13,6 +12,7 @@ import com.nudgebank.bankbackend.card.repository.CardRepository;
 import com.nudgebank.bankbackend.card.repository.CardTransactionRepository;
 import com.nudgebank.bankbackend.card.repository.MarketCategoryRepository;
 import com.nudgebank.bankbackend.card.repository.MarketRepository;
+import com.nudgebank.bankbackend.certificate.repository.CertificateSubmissionRepository;
 import com.nudgebank.bankbackend.credit.domain.CreditHistory;
 import com.nudgebank.bankbackend.credit.repository.CreditHistoryRepository;
 import com.nudgebank.bankbackend.loan.domain.LoanApplication;
@@ -25,7 +25,6 @@ import jakarta.persistence.EntityNotFoundException;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +37,9 @@ public class LoanApplicationService {
     private static final String SELF_DEVELOPMENT_TYPE = "SELF_DEVELOPMENT";
     private static final String CONSUMPTION_ANALYSIS_TYPE = "CONSUMPTION_ANALYSIS";
     private static final String EMERGENCY_TYPE = "EMERGENCY";
+    private static final String LOAN_CATEGORY_NAME = "대출";
+    private static final String LOAN_MARKET_NAME = "NudgeBank 대출 실행";
+    private static final String LOAN_MCC = "LOAN";
 
     private final LoanApplicationRepository loanApplicationRepository;
     private final LoanProductRepository loanProductRepository;
@@ -51,7 +53,7 @@ public class LoanApplicationService {
     private final MarketCategoryRepository marketCategoryRepository;
 
     public LoanApplicationSummaryResponse create(Long memberId, LoanApplicationCreateRequest request) {
-        Member member = memberRepository.findById(memberId)
+        Member member = memberRepository.findByIdForUpdate(memberId)
             .orElseThrow(() -> new EntityNotFoundException("존재하지 않는 회원입니다. memberId=" + memberId));
 
         String loanProductType = toLoanProductType(request.productKey());
@@ -73,7 +75,6 @@ public class LoanApplicationService {
         }
 
         CreditHistory creditHistory = resolveCreditHistory(memberId, loanProductType);
-
         String applicationStatus = "APPROVED";
 
         LoanApplication savedApplication = loanApplicationRepository.save(
@@ -166,20 +167,26 @@ public class LoanApplicationService {
     }
 
     private void createLoanDisbursementTransaction(Long memberId, LoanApplication loanApplication) {
-        Account account = accountRepository.findAllByMemberId(memberId).stream()
-            .findFirst()
-            .flatMap(existing -> accountRepository.findByIdForUpdate(existing.getAccountId()))
+        List<Account> memberAccounts = accountRepository.findAllByMemberId(memberId);
+        if (memberAccounts.isEmpty()) {
+            throw new EntityNotFoundException("대출 실행 계좌를 찾을 수 없습니다.");
+        }
+        if (memberAccounts.size() > 1) {
+            throw new IllegalArgumentException("입금 대상 계좌가 여러 개입니다. 대출 실행 계좌를 명시해 주세요.");
+        }
+
+        Account account = accountRepository.findByIdForUpdate(memberAccounts.get(0).getAccountId())
             .orElseThrow(() -> new EntityNotFoundException("대출 실행 계좌를 찾을 수 없습니다."));
 
         Card card = cardRepository.findByAccountId(account.getAccountId())
             .orElseThrow(() -> new EntityNotFoundException("대출 실행 내역을 연결할 카드를 찾을 수 없습니다."));
 
-        MarketCategory loanCategory = marketCategoryRepository.findByCategoryName("대출")
-            .orElseGet(() -> marketCategoryRepository.save(MarketCategory.create("대출", "LOAN")));
-
-        Market loanMarket = marketRepository
-            .findByMarketNameAndCategory_CategoryId("NudgeBank 대출 실행", loanCategory.getCategoryId())
-            .orElseGet(() -> marketRepository.save(Market.create(loanCategory, "NudgeBank 대출 실행")));
+        MarketCategory loanCategory = resolveLoanCategory();
+        Market loanMarket = resolveLoanMarket(loanCategory);
+        String qrId = "loan-disbursement-" + loanApplication.getId();
+        if (cardTransactionRepository.existsByQrId(qrId)) {
+            return;
+        }
 
         account.deposit(loanApplication.getLoanAmount());
 
@@ -188,12 +195,23 @@ public class LoanApplicationService {
                 .card(card)
                 .market(loanMarket)
                 .category(loanCategory)
-                .qrId("loan-disbursement-" + UUID.randomUUID())
+                .qrId(qrId)
                 .amount(loanApplication.getLoanAmount())
                 .transactionDatetime(OffsetDateTime.now())
                 .menuName(loanApplication.getLoanProduct().getLoanProductName())
                 .quantity(1)
                 .build()
         );
+    }
+
+    private synchronized MarketCategory resolveLoanCategory() {
+        return marketCategoryRepository.findByCategoryName(LOAN_CATEGORY_NAME)
+            .orElseGet(() -> marketCategoryRepository.save(MarketCategory.create(LOAN_CATEGORY_NAME, LOAN_MCC)));
+    }
+
+    private synchronized Market resolveLoanMarket(MarketCategory loanCategory) {
+        return marketRepository
+            .findByMarketNameAndCategory_CategoryId(LOAN_MARKET_NAME, loanCategory.getCategoryId())
+            .orElseGet(() -> marketRepository.save(Market.create(loanCategory, LOAN_MARKET_NAME)));
     }
 }
