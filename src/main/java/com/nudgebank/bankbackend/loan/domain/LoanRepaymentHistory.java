@@ -25,8 +25,8 @@ public class LoanRepaymentHistory {
     @JoinColumn(name = "loan_history_id", nullable = false)
     private LoanHistory loanHistory;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "transaction_id", nullable = false)
+    @OneToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "transaction_id", nullable = false, unique = true)
     private CardTransaction transaction;
 
     @Column(name = "repayment_amount", precision = 15, scale = 2)
