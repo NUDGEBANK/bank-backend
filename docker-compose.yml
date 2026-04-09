@@ -53,6 +53,21 @@ services:
     networks:
       - nudge-net
 
+  bank-chatbot:
+    build: ../bank-chatbot
+    container_name: nudge-bank-chatbot
+    environment:
+      - TZ=Asia/Seoul
+
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASS=${DB_PASS}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ALGORITHM=${JWT_ALGORITHM}
+
 networks:
   nudge-net:
 
