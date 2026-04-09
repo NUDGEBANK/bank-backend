@@ -54,6 +54,4 @@ public class RepaymentSchedule {
     @Column(name = "overdue_days")
     private Integer overdueDays;
 
-    @Column(name = "\"Key\"")
-    private String recordKey;
 }
