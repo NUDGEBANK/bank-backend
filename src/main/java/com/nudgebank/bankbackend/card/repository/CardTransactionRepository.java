@@ -11,6 +11,8 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 public interface CardTransactionRepository extends JpaRepository<CardTransaction, Long> {
+  boolean existsByQrId(String qrId);
+
   @EntityGraph(attributePaths = {"market", "category"})
   List<CardTransaction> findByCardCardIdOrderByTransactionDatetimeDesc(Long cardId);
 
