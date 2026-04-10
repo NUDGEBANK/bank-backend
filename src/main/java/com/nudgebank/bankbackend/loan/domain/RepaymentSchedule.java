@@ -76,4 +76,42 @@ public class RepaymentSchedule {
         this.plannedInterest = plannedInterest;
     }
 
+    public BigDecimal getRemainingPlannedPrincipal() {
+        return nullSafe(plannedPrincipal).subtract(nullSafe(paidPrincipal)).max(BigDecimal.ZERO);
+    }
+
+    public BigDecimal getRemainingPlannedInterest() {
+        return nullSafe(plannedInterest).subtract(nullSafe(paidInterest)).max(BigDecimal.ZERO);
+    }
+
+    public void addPaidPrincipal(BigDecimal amount) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+
+        this.paidPrincipal = nullSafe(this.paidPrincipal).add(amount);
+    }
+
+    public void addPaidInterest(BigDecimal amount) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+
+        this.paidInterest = nullSafe(this.paidInterest).add(amount);
+    }
+
+    public void markSettled() {
+        this.isSettled = true;
+        this.overdueDays = 0;
+    }
+
+    public void markPending(Integer overdueDays) {
+        this.isSettled = false;
+        this.overdueDays = overdueDays != null ? Math.max(overdueDays, 0) : 0;
+    }
+
+    private BigDecimal nullSafe(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
+    }
+
 }

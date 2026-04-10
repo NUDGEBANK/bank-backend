@@ -7,4 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface RepaymentScheduleRepository extends JpaRepository<RepaymentSchedule, Long> {
 
     List<RepaymentSchedule> findAllByLoanHistory_IdOrderByDueDateAsc(Long loanHistoryId);
+
+    List<RepaymentSchedule> findAllByLoanHistory_IdAndIsSettledFalseOrderByDueDateAsc(Long loanHistoryId);
 }
