@@ -95,7 +95,9 @@ public class LoanHistory {
         if (this.remainingPrincipal.compareTo(BigDecimal.ZERO) <= 0) {
             this.remainingPrincipal = BigDecimal.ZERO;
             this.status = "COMPLETED";
-            this.endDate = LocalDate.now();
+            if (this.endDate == null) {
+                this.endDate = LocalDate.now();
+            }
         }
 
         return appliedAmount;
@@ -107,7 +109,9 @@ public class LoanHistory {
         if (this.remainingPrincipal != null && this.remainingPrincipal.compareTo(BigDecimal.ZERO) <= 0) {
             this.remainingPrincipal = BigDecimal.ZERO;
             this.status = "COMPLETED";
-            this.endDate = LocalDate.now();
+            if (this.endDate == null) {
+                this.endDate = LocalDate.now();
+            }
             this.expectedRepaymentDate = null;
             return;
         }

@@ -4,6 +4,7 @@ import com.nudgebank.bankbackend.auth.security.SecurityUtil;
 import com.nudgebank.bankbackend.loan.dto.MyLoanRepaymentHistoryResponse;
 import com.nudgebank.bankbackend.loan.dto.MyLoanRepaymentScheduleResponse;
 import com.nudgebank.bankbackend.loan.dto.MyLoanSummaryResponse;
+import com.nudgebank.bankbackend.loan.dto.AutoLoanRepaymentExecuteRequest;
 import com.nudgebank.bankbackend.loan.dto.LoanRepaymentExecuteRequest;
 import com.nudgebank.bankbackend.loan.dto.LoanRepaymentExecuteResponse;
 import com.nudgebank.bankbackend.loan.service.MyLoanManagementService;
@@ -79,7 +80,7 @@ public class MyLoanManagementController {
     @PostMapping("/repayments/auto")
     public LoanRepaymentExecuteResponse autoRepay(
         Authentication authentication,
-        @RequestBody LoanRepaymentExecuteRequest request
+        @RequestBody AutoLoanRepaymentExecuteRequest request
     ) {
         Long memberId = SecurityUtil.extractUserId(authentication);
         if (memberId == null) {

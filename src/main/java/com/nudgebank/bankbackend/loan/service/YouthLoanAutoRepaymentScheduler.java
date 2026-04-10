@@ -1,6 +1,7 @@
 package com.nudgebank.bankbackend.loan.service;
 
 import com.nudgebank.bankbackend.loan.repository.LoanRepository;
+import java.time.LocalDate;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,7 +21,10 @@ public class YouthLoanAutoRepaymentScheduler {
 
     @Scheduled(cron = "0 0 9 * * *", zone = "Asia/Seoul")
     public void executeDueYouthLoanRepayments() {
-        List<Long> memberIds = loanRepository.findDistinctMemberIdsByLoanProductTypeAndActive(SELF_DEVELOPMENT_TYPE);
+        List<Long> memberIds = loanRepository.findDistinctMemberIdsByLoanProductTypeAndDueRepayment(
+            SELF_DEVELOPMENT_TYPE,
+            LocalDate.now()
+        );
         for (Long memberId : memberIds) {
             try {
                 loanRepaymentService.executeAutoRepayment(memberId, YOUTH_LOAN_PRODUCT_KEY);

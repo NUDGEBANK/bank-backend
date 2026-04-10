@@ -24,7 +24,18 @@ public interface LoanRepository extends JpaRepository<Loan, Long> {
         join l.loanApplication la
         join la.loanProduct lp
         where lp.loanProductType = :loanProductType
-          and l.status <> 'COMPLETED'
+          and l.status in ('ACTIVE', 'OVERDUE')
+          and exists (
+            select 1
+            from RepaymentSchedule rs
+            where rs.loanHistory.member.memberId = l.member.memberId
+              and rs.isSettled = false
+              and rs.dueDate is not null
+              and rs.dueDate <= :targetDate
+          )
     """)
-    List<Long> findDistinctMemberIdsByLoanProductTypeAndActive(@Param("loanProductType") String loanProductType);
+    List<Long> findDistinctMemberIdsByLoanProductTypeAndDueRepayment(
+        @Param("loanProductType") String loanProductType,
+        @Param("targetDate") java.time.LocalDate targetDate
+    );
 }

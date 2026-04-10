@@ -105,14 +105,16 @@ public class LoanRepaymentService {
             appliedRepayment.overdueInterestPaid(),
             nullSafe(resolvedLoan.loanHistory().getRemainingPrincipal()),
             resolvedLoan.loanHistory().getStatus(),
-            false
+            false,
+            "MANUAL_COMPLETED",
+            null
         );
     }
 
     public LoanRepaymentExecuteResponse executeAutoRepayment(Long memberId, String productKey) {
         ResolvedLoan resolvedLoan = resolveSelfDevelopmentLoan(memberId, productKey);
         List<RepaymentSchedule> dueSchedules = repaymentScheduleRepository
-            .findAllByLoanHistory_IdAndIsSettledFalseOrderByDueDateAsc(resolvedLoan.loanHistory().getId()).stream()
+            .findAllUnsettledByLoanHistoryIdForUpdate(resolvedLoan.loanHistory().getId()).stream()
             .filter(schedule -> schedule.getDueDate() != null && !schedule.getDueDate().isAfter(LocalDate.now()))
             .toList();
 
@@ -125,7 +127,9 @@ public class LoanRepaymentService {
                 ZERO,
                 nullSafe(resolvedLoan.loanHistory().getRemainingPrincipal()),
                 resolvedLoan.loanHistory().getStatus(),
-                true
+                false,
+                "AUTO_SKIPPED",
+                "NO_DUE_AMOUNT"
             );
         }
 
@@ -139,7 +143,9 @@ public class LoanRepaymentService {
                 ZERO,
                 nullSafe(resolvedLoan.loanHistory().getRemainingPrincipal()),
                 resolvedLoan.loanHistory().getStatus(),
-                true
+                false,
+                "AUTO_SKIPPED",
+                "NO_DUE_AMOUNT"
             );
         }
 
@@ -155,7 +161,9 @@ public class LoanRepaymentService {
                 ZERO,
                 nullSafe(resolvedLoan.loanHistory().getRemainingPrincipal()),
                 resolvedLoan.loanHistory().getStatus(),
-                true
+                false,
+                "AUTO_FAILED",
+                "INSUFFICIENT_BALANCE"
             );
         }
 
@@ -196,7 +204,9 @@ public class LoanRepaymentService {
             appliedRepayment.overdueInterestPaid(),
             nullSafe(resolvedLoan.loanHistory().getRemainingPrincipal()),
             resolvedLoan.loanHistory().getStatus(),
-            true
+            true,
+            "AUTO_COMPLETED",
+            null
         );
     }
 
@@ -305,7 +315,7 @@ public class LoanRepaymentService {
 
     private List<RepaymentSchedule> resolveTargetSchedules(LoanHistory loanHistory) {
         List<RepaymentSchedule> unsettledSchedules =
-            repaymentScheduleRepository.findAllByLoanHistory_IdAndIsSettledFalseOrderByDueDateAsc(loanHistory.getId());
+            repaymentScheduleRepository.findAllUnsettledByLoanHistoryIdForUpdate(loanHistory.getId());
         if (unsettledSchedules.isEmpty()) {
             return List.of();
         }
@@ -365,11 +375,17 @@ public class LoanRepaymentService {
     }
 
     private int calculateOverdueDays(RepaymentSchedule schedule) {
-        if (schedule.getDueDate() == null || Boolean.TRUE.equals(schedule.getIsSettled())) {
+        if (schedule.getDueDate() == null) {
             return 0;
         }
 
-        return (int) Math.max(0, ChronoUnit.DAYS.between(schedule.getDueDate(), LocalDate.now()));
+        if (Boolean.TRUE.equals(schedule.getIsSettled())) {
+            return schedule.getOverdueDays() != null ? schedule.getOverdueDays() : 0;
+        }
+
+        int existing = schedule.getOverdueDays() != null ? schedule.getOverdueDays() : 0;
+        int calculated = (int) Math.max(0, ChronoUnit.DAYS.between(schedule.getDueDate(), LocalDate.now()));
+        return Math.max(existing, calculated);
     }
 
     private BigDecimal calculateOverdueInterest(BigDecimal baseAmount, BigDecimal currentRate, int overdueDays) {

@@ -9,5 +9,7 @@ public record LoanRepaymentExecuteResponse(
     BigDecimal overdueInterest,
     BigDecimal remainingPrincipal,
     String loanStatus,
-    boolean autoTransferred
+    boolean autoTransferred,
+    String executionStatus,
+    String failureReason
 ) {}
