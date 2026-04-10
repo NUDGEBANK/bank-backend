@@ -21,6 +21,7 @@ import com.nudgebank.bankbackend.loan.domain.LoanHistory;
 import com.nudgebank.bankbackend.loan.domain.LoanProduct;
 import com.nudgebank.bankbackend.loan.domain.RepaymentSchedule;
 import com.nudgebank.bankbackend.loan.dto.LoanApplicationCreateRequest;
+import com.nudgebank.bankbackend.loan.domain.LoanApplicationStatus;
 import com.nudgebank.bankbackend.loan.dto.LoanApplicationSummaryResponse;
 import com.nudgebank.bankbackend.loan.repository.LoanApplicationRepository;
 import com.nudgebank.bankbackend.loan.repository.LoanHistoryRepository;
@@ -49,7 +50,6 @@ public class LoanApplicationService {
     private static final String CONSUMPTION_ANALYSIS_TYPE = "CONSUMPTION_ANALYSIS";
     private static final String EMERGENCY_TYPE = "EMERGENCY";
     private static final String ACTIVE_STATUS = "ACTIVE";
-    private static final String APPROVED_STATUS = "APPROVED";
 
     private static final String LOAN_CATEGORY_NAME = "대출";
     private static final String LOAN_MARKET_NAME = "NudgeBank 대출 실행";
@@ -69,6 +69,103 @@ public class LoanApplicationService {
     private final CardTransactionRepository cardTransactionRepository;
     private final MarketRepository marketRepository;
     private final MarketCategoryRepository marketCategoryRepository;
+
+    // submit(): 신청만 저장, loan_application만 생성, 상태는 PENDING
+    @Transactional
+    public LoanApplicationSummaryResponse submit(Long memberId, LoanApplicationCreateRequest request) {
+        Member member = memberRepository.findByIdForUpdate(memberId)
+                .orElseThrow(() -> new EntityNotFoundException("존재하지 않는 회원입니다. memberId=" + memberId));
+
+        String loanProductType = toLoanProductType(request.productKey());
+        LoanProduct loanProduct = loanProductRepository.findByLoanProductType(loanProductType)
+                .orElseThrow(() -> new EntityNotFoundException("대출 상품을 찾을 수 없습니다. type=" + loanProductType));
+
+        boolean alreadyApplied = loanApplicationRepository
+                .findAllByMember_MemberIdOrderByAppliedAtDesc(member.getMemberId())
+                .stream()
+                .anyMatch(application -> loanProductType.equals(application.getLoanProduct().getLoanProductType())
+                        && application.getApplicationStatus() != LoanApplicationStatus.REJECTED);
+
+        if (alreadyApplied) {
+            throw new IllegalArgumentException("이미 진행 중이거나 승인된 동일 상품 신청이 있습니다.");
+        }
+
+        if (SELF_DEVELOPMENT_TYPE.equals(loanProductType)
+                && accountRepository.findAllByMemberId(member.getMemberId()).isEmpty()) {
+            throw new IllegalArgumentException("해당 대출 신청을 위해 계좌가 필요합니다.");
+        }
+
+        CreditHistory creditHistory = resolveCreditHistory(memberId, loanProductType);
+        Card selectedCard = resolveSelectedCard(memberId, request.cardId());
+
+        LoanApplication saved = loanApplicationRepository.save(
+                LoanApplication.builder()
+                        .loanProduct(loanProduct)
+                        .member(member)
+                        .creditHistory(creditHistory)
+                        .card(selectedCard)
+                        .loanAmount(request.loanAmount())
+                        .loanTerm(request.loanTerm())
+                        .applicationStatus(LoanApplicationStatus.PENDING)
+                        .appliedAt(LocalDateTime.now())
+                        .monthlyIncome(request.monthlyIncome())
+                        .salaryDate(request.salaryDate())
+                        .build()
+        );
+
+        return toSummary(saved);
+    }
+
+    // approve(): 상태 승인 변경, loan, loan_history, repayment_schedule, 입금, 카드 거래 생성
+    @Transactional
+    public LoanApplicationSummaryResponse approve(Long applicationId) {
+        LoanApplication application = loanApplicationRepository.findById(applicationId)
+                .orElseThrow(() -> new EntityNotFoundException("대출 신청을 찾을 수 없습니다. applicationId=" + applicationId));
+
+        if (!application.isPendingReview()) {
+            throw new IllegalStateException("심사 대기 상태인 신청만 승인할 수 있습니다. currentStatus=" + application.getApplicationStatus());
+        }
+
+        Account repaymentAccount = resolveDisbursementAccount(
+                application.getMember().getMemberId(),
+                application.getCard()
+        );
+
+        application.approve();
+        createLoanExecution(application, repaymentAccount);
+
+        return toSummary(application);
+    }
+
+    // reject(): 상태 거절 변경
+    @Transactional
+    public LoanApplicationSummaryResponse reject(Long applicationId, Long reviewerId, String reason) {
+        requireLoanReviewer(reviewerId);
+
+        LoanApplication application = loanApplicationRepository.findByIdForUpdate(applicationId)
+                .orElseThrow(() -> new EntityNotFoundException("대출 신청을 찾을 수 없습니다. applicationId=" + applicationId));
+
+        if (!application.isPendingReview()) {
+            throw new IllegalStateException(
+                    "심사 대기 상태인 신청만 거절할 수 있습니다. currentStatus=" + application.getApplicationStatus()
+            );
+        }
+
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("거절 사유는 필수입니다.");
+        }
+
+        application.reject(reviewerId);
+
+        return toSummary(application);
+    }
+
+    private Member requireLoanReviewer(Long reviewerId) {
+        Member reviewer = memberRepository.findById(reviewerId)
+                .orElseThrow(() -> new EntityNotFoundException("심사자 정보를 찾을 수 없습니다. memberId=" + reviewerId));
+
+        return reviewer;
+    }
 
     public LoanApplicationSummaryResponse create(Long memberId, LoanApplicationCreateRequest request) {
         Member member = memberRepository.findByIdForUpdate(memberId)
@@ -95,6 +192,7 @@ public class LoanApplicationService {
         Card selectedCard = resolveSelectedCard(member.getMemberId(), request.cardId());
         Account repaymentAccount = resolveDisbursementAccount(member.getMemberId(), selectedCard);
 
+        // 대출 신청 (loan_application 저장)
         LoanApplication savedApplication = loanApplicationRepository.save(
             LoanApplication.builder()
                 .loanProduct(loanProduct)
@@ -103,7 +201,7 @@ public class LoanApplicationService {
                 .card(selectedCard)
                 .loanAmount(request.loanAmount())
                 .loanTerm(request.loanTerm())
-                .applicationStatus(APPROVED_STATUS)
+                .applicationStatus(LoanApplicationStatus.APPROVED)
                 .appliedAt(LocalDateTime.now())
                 .reviewComment(request.purpose())
                 .monthlyIncome(request.monthlyIncome())
@@ -141,6 +239,7 @@ public class LoanApplicationService {
             });
     }
 
+    // 대출 실행
     private void createLoanExecution(LoanApplication loanApplication, Account repaymentAccount) {
         Card card = loanApplication.getCard();
 
@@ -157,6 +256,7 @@ public class LoanApplicationService {
         BigDecimal principalAmount = nullSafe(loanApplication.getLoanAmount());
         BigDecimal interestRate = resolveInitialInterestRate(loanApplication.getLoanProduct());
 
+        // loan 저장
         loanRepository.save(
             Loan.builder()
                 .loanApplication(loanApplication)
@@ -165,10 +265,11 @@ public class LoanApplicationService {
                 .interestRate(interestRate)
                 .startDate(startDate)
                 .endDate(endDate)
-                .status(ACTIVE_STATUS)
+                .status(ACTIVE_STATUS) // 활성 대출
                 .build()
         );
 
+        // loan_history 저장
         LoanHistory loanHistory = loanHistoryRepository.save(
             LoanHistory.create(
                 loanApplication.getMember(),
@@ -333,7 +434,7 @@ public class LoanApplicationService {
             loanApplication.getId(),
             toProductKey(loanApplication.getLoanProduct().getLoanProductType()),
             loanApplication.getLoanProduct().getLoanProductName(),
-            loanApplication.getApplicationStatus(),
+            loanApplication.getApplicationStatus().name(),
             loanApplication.getAppliedAt(),
             requiresCertificateSubmission,
             certificateSubmitted,
