@@ -95,9 +95,27 @@ public class LoanHistory {
         if (this.remainingPrincipal.compareTo(BigDecimal.ZERO) <= 0) {
             this.remainingPrincipal = BigDecimal.ZERO;
             this.status = "COMPLETED";
-            this.endDate = LocalDate.now();
+            if (this.endDate == null) {
+                this.endDate = LocalDate.now();
+            }
         }
 
         return appliedAmount;
+    }
+
+    public void syncRepaymentStatus(LocalDate nextRepaymentDate, boolean overdue) {
+        this.expectedRepaymentDate = nextRepaymentDate;
+
+        if (this.remainingPrincipal != null && this.remainingPrincipal.compareTo(BigDecimal.ZERO) <= 0) {
+            this.remainingPrincipal = BigDecimal.ZERO;
+            this.status = "COMPLETED";
+            if (this.endDate == null) {
+                this.endDate = LocalDate.now();
+            }
+            this.expectedRepaymentDate = null;
+            return;
+        }
+
+        this.status = overdue ? "OVERDUE" : "ACTIVE";
     }
 }
