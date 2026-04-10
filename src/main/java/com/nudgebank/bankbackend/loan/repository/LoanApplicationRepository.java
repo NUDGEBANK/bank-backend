@@ -10,5 +10,10 @@ public interface LoanApplicationRepository extends JpaRepository<LoanApplication
 
     Optional<LoanApplication> findTopByMember_MemberIdOrderByAppliedAtDesc(Long memberId);
 
+    Optional<LoanApplication> findTopByMember_MemberIdAndLoanProduct_LoanProductTypeOrderByAppliedAtDesc(
+        Long memberId,
+        String loanProductType
+    );
+
     List<LoanApplication> findAllByMember_MemberIdOrderByAppliedAtDesc(Long memberId);
 }

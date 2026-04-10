@@ -35,6 +35,8 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -90,12 +92,15 @@ public class LoanApplicationService {
         }
 
         CreditHistory creditHistory = resolveCreditHistory(member.getMemberId(), loanProductType);
+        Card selectedCard = resolveSelectedCard(member.getMemberId(), request.cardId());
+        Account repaymentAccount = resolveDisbursementAccount(member.getMemberId(), selectedCard);
 
         LoanApplication savedApplication = loanApplicationRepository.save(
             LoanApplication.builder()
                 .loanProduct(loanProduct)
                 .member(member)
                 .creditHistory(creditHistory)
+                .card(selectedCard)
                 .loanAmount(request.loanAmount())
                 .loanTerm(request.loanTerm())
                 .applicationStatus(APPROVED_STATUS)
@@ -106,7 +111,7 @@ public class LoanApplicationService {
                 .build()
         );
 
-        createLoanExecution(savedApplication);
+        createLoanExecution(savedApplication, repaymentAccount);
         return toSummary(savedApplication);
     }
 
@@ -136,10 +141,8 @@ public class LoanApplicationService {
             });
     }
 
-    private void createLoanExecution(LoanApplication loanApplication) {
-        Account disbursementAccount = resolveDisbursementAccount(loanApplication.getMember().getMemberId());
-        Card card = cardRepository.findByAccountId(disbursementAccount.getAccountId())
-            .orElseThrow(() -> new EntityNotFoundException("대출 실행에 사용할 카드가 없습니다."));
+    private void createLoanExecution(LoanApplication loanApplication, Account repaymentAccount) {
+        Card card = loanApplication.getCard();
 
         String qrId = "loan-disbursement-" + loanApplication.getId();
         if (cardTransactionRepository.existsByQrId(qrId)) {
@@ -173,7 +176,7 @@ public class LoanApplicationService {
                 loanApplication.getMember(),
                 card,
                 principalAmount,
-                disbursementAccount.getAccountNumber(),
+                generateVirtualAccountNumber(),
                 principalAmount,
                 startDate,
                 endDate,
@@ -187,7 +190,7 @@ public class LoanApplicationService {
             buildRepaymentSchedules(loanHistory, principalAmount, interestRate, startDate, repaymentMonths)
         );
 
-        disbursementAccount.deposit(principalAmount);
+        repaymentAccount.deposit(principalAmount);
 
         MarketCategory category = resolveLoanCategory();
         Market market = resolveLoanMarket(category);
@@ -206,20 +209,28 @@ public class LoanApplicationService {
         cardTransactionRepository.save(transaction);
     }
 
-    private Account resolveDisbursementAccount(Long memberId) {
-        List<Account> accounts = accountRepository.findAllByMemberId(memberId);
-
-        if (accounts.isEmpty()) {
-            throw new EntityNotFoundException("대출 실행 계좌를 찾을 수 없습니다.");
-        }
-
-        if (accounts.size() > 1) {
-            throw new IllegalArgumentException("입금 대상 계좌가 여러 개입니다. 대출 실행 계좌를 명시해 주세요.");
-        }
-
-        Long accountId = accounts.get(0).getAccountId();
-        return accountRepository.findByIdForUpdate(accountId)
+    private Account resolveDisbursementAccount(Long memberId, Card selectedCard) {
+        Account account = accountRepository.findByIdForUpdate(selectedCard.getAccountId())
             .orElseThrow(() -> new EntityNotFoundException("대출 실행 계좌를 찾을 수 없습니다."));
+        if (!memberId.equals(account.getMemberId())) {
+            throw new IllegalArgumentException("요청한 카드의 계좌를 사용할 수 없습니다.");
+        }
+        return account;
+    }
+
+    private Card resolveSelectedCard(Long memberId, Long requestedCardId) {
+        if (requestedCardId == null) {
+            throw new IllegalArgumentException("대출 신청 카드를 선택해 주세요.");
+        }
+
+        Card card = cardRepository.findById(requestedCardId)
+            .orElseThrow(() -> new EntityNotFoundException("대출 신청 카드를 찾을 수 없습니다."));
+        Account cardAccount = accountRepository.findById(card.getAccountId())
+            .orElseThrow(() -> new EntityNotFoundException("대출 신청 카드의 계좌를 찾을 수 없습니다."));
+        if (!memberId.equals(cardAccount.getMemberId())) {
+            throw new IllegalArgumentException("요청한 카드를 사용할 수 없습니다.");
+        }
+        return card;
     }
 
     private synchronized MarketCategory resolveLoanCategory() {
@@ -332,5 +343,16 @@ public class LoanApplicationService {
 
     private BigDecimal nullSafe(BigDecimal value) {
         return value != null ? value : BigDecimal.ZERO;
+    }
+
+    private String generateVirtualAccountNumber() {
+        for (int attempt = 0; attempt < 5; attempt++) {
+            String candidate = "VA-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase();
+            if (!loanHistoryRepository.existsByRepaymentAccountNumber(candidate)) {
+                return candidate;
+            }
+        }
+
+        throw new IllegalStateException("가상계좌 번호 생성에 실패했습니다.");
     }
 }
