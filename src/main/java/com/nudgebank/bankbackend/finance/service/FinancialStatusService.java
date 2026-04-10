@@ -12,6 +12,8 @@ import com.nudgebank.bankbackend.loan.domain.LoanHistory;
 import com.nudgebank.bankbackend.loan.repository.LoanApplicationRepository;
 import com.nudgebank.bankbackend.loan.repository.LoanHistoryRepository;
 import jakarta.persistence.EntityNotFoundException;
+import java.util.Comparator;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,13 +56,13 @@ public class FinancialStatusService {
         BigDecimal protectedBalance = nullSafe(account.getProtectedBalance());
         BigDecimal availableBalance = calculateAvailableBalance(linkedAccountBalance, protectedBalance);
 
-        LoanHistory loanHistory = loanHistoryRepository
-                .findByCard_CardIdAndStatus(card.getCardId(), "ACTIVE")
-                .orElse(null);
+        List<LoanHistory> activeLoanHistories = loanHistoryRepository
+                .findAllByCard_CardIdAndStatusOrderByExpectedRepaymentDateAscCreatedAtDesc(card.getCardId(), "ACTIVE");
 
-        BigDecimal totalLoanRemainingPrincipal = loanHistory != null
-                ? nullSafe(loanHistory.getRemainingPrincipal())
-                : BigDecimal.ZERO;
+        BigDecimal totalLoanRemainingPrincipal = activeLoanHistories.stream()
+                .map(LoanHistory::getRemainingPrincipal)
+                .map(this::nullSafe)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         LoanApplication latestLoanApplication = loanApplicationRepository
                 .findTopByMember_MemberIdOrderByAppliedAtDesc(memberId)
@@ -74,7 +76,7 @@ public class FinancialStatusService {
                 ? latestLoanApplication.getSalaryDate()
                 : null;
 
-        Integer daysUntilPaymentDue = calculateDaysUntilPaymentDue(loanHistory);
+        Integer daysUntilPaymentDue = calculateDaysUntilPaymentDue(resolveNearestDueLoan(activeLoanHistories));
 
         BigDecimal currentMonthSpendingAmount = nullSafe(
                 cardTransactionRepository.sumCurrentMonthSpendingAmountUntilTransaction(
@@ -142,6 +144,14 @@ public class FinancialStatusService {
         );
 
         return Math.max(days, 0);
+    }
+
+    private LoanHistory resolveNearestDueLoan(List<LoanHistory> activeLoanHistories) {
+        return activeLoanHistories.stream()
+                .filter(loanHistory -> loanHistory.getExpectedRepaymentDate() != null)
+                .min(Comparator.comparing(LoanHistory::getExpectedRepaymentDate)
+                        .thenComparing(LoanHistory::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                .orElse(null);
     }
 
     private OffsetDateTime getStartOfMonth(OffsetDateTime baseDateTime) {

@@ -30,7 +30,7 @@ public class AutoRepaymentExecutionService {
     @Transactional
     public AutoRepaymentExecutionResult executeAfterPayment(Long memberId, CardTransaction transaction) {
         LoanHistory loanHistory = loanHistoryRepository
-                .findByCard_CardIdAndStatus(transaction.getCard().getCardId(), "ACTIVE")
+                .findTopByCard_CardIdAndStatusOrderByCreatedAtDesc(transaction.getCard().getCardId(), "ACTIVE")
                 .orElse(null);
 
         if (loanHistory == null) {
