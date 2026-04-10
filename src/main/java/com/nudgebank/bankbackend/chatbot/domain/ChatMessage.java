@@ -13,6 +13,7 @@ import java.time.OffsetDateTime;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.CreationTimestamp;
 
 @Entity
 @Table(name = "chat_messages")
@@ -36,6 +37,7 @@ public class ChatMessage {
     @Column(name = "message_content", columnDefinition = "TEXT")
     private String messageContent;
 
+    @CreationTimestamp
     @Column(name = "created_at")
     private OffsetDateTime createdAt;
 }

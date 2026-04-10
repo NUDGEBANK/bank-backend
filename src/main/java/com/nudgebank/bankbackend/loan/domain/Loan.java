@@ -42,4 +42,8 @@ public class Loan {
 
     @Column(name = "status", length = 200)
     private String status;
+
+    public void updateInterestRate(BigDecimal interestRate) {
+        this.interestRate = interestRate;
+    }
 }

@@ -30,7 +30,7 @@ public class LoanProductInitializer implements CommandLineRunner {
                 3_000_000L,
                 500_000L,
                 12,
-                "EQUAL_INSTALLMENT"
+                "MATURITY_LUMP_SUM"
             ),
             new LoanProductSeed(
                 "CONSUMPTION_ANALYSIS",

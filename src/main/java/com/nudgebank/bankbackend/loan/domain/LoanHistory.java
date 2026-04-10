@@ -26,7 +26,7 @@ public class LoanHistory {
     @JoinColumn(name = "member_id", nullable = false)
     private Member member;
 
-    @OneToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "card_id", nullable = false)
     private Card card;
 
@@ -54,6 +54,32 @@ public class LoanHistory {
     @Column(name = "created_at")
     private OffsetDateTime createdAt;
 
+    public static LoanHistory create(
+        Member member,
+        Card card,
+        BigDecimal totalPrincipal,
+        String repaymentAccountNumber,
+        BigDecimal remainingPrincipal,
+        LocalDate startDate,
+        LocalDate endDate,
+        String status,
+        LocalDate expectedRepaymentDate,
+        OffsetDateTime createdAt
+    ) {
+        return LoanHistory.builder()
+            .member(member)
+            .card(card)
+            .totalPrincipal(totalPrincipal)
+            .repaymentAccountNumber(repaymentAccountNumber)
+            .remainingPrincipal(remainingPrincipal)
+            .startDate(startDate)
+            .endDate(endDate)
+            .status(status)
+            .expectedRepaymentDate(expectedRepaymentDate)
+            .createdAt(createdAt)
+            .build();
+    }
+
     public BigDecimal applyRepayment(BigDecimal repaymentAmount) {
         if (repaymentAmount == null || repaymentAmount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("상환 금액은 0보다 커야 합니다.");
@@ -69,9 +95,27 @@ public class LoanHistory {
         if (this.remainingPrincipal.compareTo(BigDecimal.ZERO) <= 0) {
             this.remainingPrincipal = BigDecimal.ZERO;
             this.status = "COMPLETED";
-            this.endDate = LocalDate.now();
+            if (this.endDate == null) {
+                this.endDate = LocalDate.now();
+            }
         }
 
         return appliedAmount;
+    }
+
+    public void syncRepaymentStatus(LocalDate nextRepaymentDate, boolean overdue) {
+        this.expectedRepaymentDate = nextRepaymentDate;
+
+        if (this.remainingPrincipal != null && this.remainingPrincipal.compareTo(BigDecimal.ZERO) <= 0) {
+            this.remainingPrincipal = BigDecimal.ZERO;
+            this.status = "COMPLETED";
+            if (this.endDate == null) {
+                this.endDate = LocalDate.now();
+            }
+            this.expectedRepaymentDate = null;
+            return;
+        }
+
+        this.status = overdue ? "OVERDUE" : "ACTIVE";
     }
 }

@@ -54,4 +54,64 @@ public class RepaymentSchedule {
     @Column(name = "overdue_days")
     private Integer overdueDays;
 
+    public static RepaymentSchedule create(
+        LoanHistory loanHistory,
+        LocalDate dueDate,
+        BigDecimal plannedPrincipal,
+        BigDecimal plannedInterest
+    ) {
+        RepaymentSchedule schedule = new RepaymentSchedule();
+        schedule.loanHistory = loanHistory;
+        schedule.dueDate = dueDate;
+        schedule.plannedPrincipal = plannedPrincipal;
+        schedule.plannedInterest = plannedInterest;
+        schedule.paidPrincipal = BigDecimal.ZERO;
+        schedule.paidInterest = BigDecimal.ZERO;
+        schedule.isSettled = false;
+        schedule.overdueDays = 0;
+        return schedule;
+    }
+
+    public void updatePlannedInterest(BigDecimal plannedInterest) {
+        this.plannedInterest = plannedInterest;
+    }
+
+    public BigDecimal getRemainingPlannedPrincipal() {
+        return nullSafe(plannedPrincipal).subtract(nullSafe(paidPrincipal)).max(BigDecimal.ZERO);
+    }
+
+    public BigDecimal getRemainingPlannedInterest() {
+        return nullSafe(plannedInterest).subtract(nullSafe(paidInterest)).max(BigDecimal.ZERO);
+    }
+
+    public void addPaidPrincipal(BigDecimal amount) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+
+        this.paidPrincipal = nullSafe(this.paidPrincipal).add(amount);
+    }
+
+    public void addPaidInterest(BigDecimal amount) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+
+        this.paidInterest = nullSafe(this.paidInterest).add(amount);
+    }
+
+    public void markSettled() {
+        this.isSettled = true;
+        this.overdueDays = 0;
+    }
+
+    public void markPending(Integer overdueDays) {
+        this.isSettled = false;
+        this.overdueDays = overdueDays != null ? Math.max(overdueDays, 0) : 0;
+    }
+
+    private BigDecimal nullSafe(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
+    }
+
 }
