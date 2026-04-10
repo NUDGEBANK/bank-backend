@@ -401,10 +401,6 @@ public class CreditScoreService {
         .orElse(null);
   }
 
-  /*
-    estimatedLoanLimit 제공
-    내 점수/추천 상품 응답이지, 이 상품을 지금 신청 가능한지 판단하는 건 아님
-   */
   private CreditScoreResponse toResponse(CreditHistory history, Integer previousScore) {
     int creditScore = history.getCreditScore() == null ? 0 : history.getCreditScore();
     long estimatedLoanLimit = Math.max(5_000_000L, (long) creditScore * 50_000L);
