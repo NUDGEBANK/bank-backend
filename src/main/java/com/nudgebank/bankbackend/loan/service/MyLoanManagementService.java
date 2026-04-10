@@ -23,19 +23,23 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class MyLoanManagementService {
 
+    private static final String SELF_DEVELOPMENT_TYPE = "SELF_DEVELOPMENT";
+    private static final String CONSUMPTION_ANALYSIS_TYPE = "CONSUMPTION_ANALYSIS";
+    private static final String EMERGENCY_TYPE = "EMERGENCY";
+
     private final LoanApplicationRepository loanApplicationRepository;
     private final LoanHistoryRepository loanHistoryRepository;
     private final LoanRepository loanRepository;
     private final RepaymentScheduleRepository repaymentScheduleRepository;
     private final LoanRepaymentHistoryRepository loanRepaymentHistoryRepository;
 
-    public MyLoanSummaryResponse getSummary(Long memberId) {
-        LoanHistory loanHistory = loanHistoryRepository.findTopByMember_MemberIdOrderByCreatedAtDesc(memberId).orElse(null);
+    public MyLoanSummaryResponse getSummary(Long memberId, String productKey) {
+        LoanHistory loanHistory = resolveLoanHistory(memberId, productKey).orElse(null);
         if (loanHistory == null) {
-            return buildPendingLoanSummary(memberId);
+            return buildPendingLoanSummary(memberId, productKey);
         }
 
-        Loan loan = loanRepository.findTopByMember_MemberIdOrderByStartDateDescIdDesc(memberId).orElse(null);
+        Loan loan = resolveLoan(memberId, productKey).orElse(null);
         List<RepaymentSchedule> schedules =
             repaymentScheduleRepository.findAllByLoanHistory_IdOrderByDueDateAsc(loanHistory.getId());
 
@@ -70,10 +74,10 @@ public class MyLoanManagementService {
         );
     }
 
-    public List<MyLoanRepaymentScheduleResponse> getRepaymentSchedules(Long memberId) {
-        LoanHistory loanHistory = loanHistoryRepository.findTopByMember_MemberIdOrderByCreatedAtDesc(memberId).orElse(null);
+    public List<MyLoanRepaymentScheduleResponse> getRepaymentSchedules(Long memberId, String productKey) {
+        LoanHistory loanHistory = resolveLoanHistory(memberId, productKey).orElse(null);
         if (loanHistory == null) {
-            ensureDisplayableLoanExists(memberId);
+            ensureDisplayableLoanExists(memberId, productKey);
             return List.of();
         }
 
@@ -91,10 +95,10 @@ public class MyLoanManagementService {
             .toList();
     }
 
-    public List<MyLoanRepaymentHistoryResponse> getRepaymentHistories(Long memberId) {
-        LoanHistory loanHistory = loanHistoryRepository.findTopByMember_MemberIdOrderByCreatedAtDesc(memberId).orElse(null);
+    public List<MyLoanRepaymentHistoryResponse> getRepaymentHistories(Long memberId, String productKey) {
+        LoanHistory loanHistory = resolveLoanHistory(memberId, productKey).orElse(null);
         if (loanHistory == null) {
-            ensureDisplayableLoanExists(memberId);
+            ensureDisplayableLoanExists(memberId, productKey);
             return List.of();
         }
 
@@ -110,8 +114,8 @@ public class MyLoanManagementService {
             .toList();
     }
 
-    private MyLoanSummaryResponse buildPendingLoanSummary(Long memberId) {
-        LoanApplication application = ensureDisplayableLoanExists(memberId);
+    private MyLoanSummaryResponse buildPendingLoanSummary(Long memberId, String productKey) {
+        LoanApplication application = ensureDisplayableLoanExists(memberId, productKey);
         BigDecimal totalPrincipal = nullSafe(application.getLoanAmount());
         BigDecimal interestRate = application.getLoanProduct().getMinInterestRate() != null
             ? application.getLoanProduct().getMinInterestRate()
@@ -143,14 +147,65 @@ public class MyLoanManagementService {
         );
     }
 
-    private LoanApplication ensureDisplayableLoanExists(Long memberId) {
-        return loanApplicationRepository.findTopByMember_MemberIdOrderByAppliedAtDesc(memberId)
+    private LoanApplication ensureDisplayableLoanExists(Long memberId, String productKey) {
+        String loanProductType = toLoanProductType(productKey);
+        return (loanProductType == null
+            ? loanApplicationRepository.findTopByMember_MemberIdOrderByAppliedAtDesc(memberId)
+            : loanApplicationRepository.findTopByMember_MemberIdAndLoanProduct_LoanProductTypeOrderByAppliedAtDesc(
+                memberId,
+                loanProductType
+            ))
             .orElseThrow(() -> new EntityNotFoundException("대출 상품이 없습니다."));
     }
 
     private LoanHistory getLatestLoanHistory(Long memberId) {
         return loanHistoryRepository.findTopByMember_MemberIdOrderByCreatedAtDesc(memberId)
             .orElseThrow(() -> new EntityNotFoundException("대출 관리 정보가 없습니다."));
+    }
+
+    private java.util.Optional<Loan> resolveLoan(Long memberId, String productKey) {
+        String loanProductType = toLoanProductType(productKey);
+        if (loanProductType == null) {
+            return loanRepository.findTopByMember_MemberIdOrderByStartDateDescIdDesc(memberId);
+        }
+
+        return loanRepository
+            .findTopByMember_MemberIdAndLoanApplication_LoanProduct_LoanProductTypeOrderByStartDateDescIdDesc(
+                memberId,
+                loanProductType
+            );
+    }
+
+    private java.util.Optional<LoanHistory> resolveLoanHistory(Long memberId, String productKey) {
+        if (productKey == null || productKey.isBlank()) {
+            return loanHistoryRepository.findTopByMember_MemberIdOrderByCreatedAtDesc(memberId);
+        }
+
+        Loan loan = resolveLoan(memberId, productKey).orElse(null);
+        if (loan == null || loan.getLoanApplication() == null || loan.getLoanApplication().getCard() == null) {
+            return java.util.Optional.empty();
+        }
+
+        return loanHistoryRepository
+            .findTopByMember_MemberIdAndCard_CardIdAndTotalPrincipalAndStartDateOrderByCreatedAtDesc(
+                memberId,
+                loan.getLoanApplication().getCard().getCardId(),
+                nullSafe(loan.getPrincipalAmount()),
+                loan.getStartDate()
+            );
+    }
+
+    private String toLoanProductType(String productKey) {
+        if (productKey == null || productKey.isBlank()) {
+            return null;
+        }
+
+        return switch (productKey) {
+            case "youth-loan" -> SELF_DEVELOPMENT_TYPE;
+            case "consumption-loan" -> CONSUMPTION_ANALYSIS_TYPE;
+            case "situate-loan" -> EMERGENCY_TYPE;
+            default -> null;
+        };
     }
 
     private BigDecimal nullSafe(BigDecimal value) {
