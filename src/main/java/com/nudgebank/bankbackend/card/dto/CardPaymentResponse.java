@@ -20,7 +20,7 @@ public class CardPaymentResponse {
     private String policyGrade;
     // 자동상환 정책 등급 (예: NO_LOAN, BALANCED)
     private BigDecimal repaymentRate;
-    // 실제 적용된 자동상환 비율
+    // 실제 적용된 자동상환 비율 퍼센트 값 (예: 20.00)
     private BigDecimal repaymentAmount;
     // 결제 직후 추가로 차감된 자동상환 금액
     private BigDecimal remainingLoanBalance;
