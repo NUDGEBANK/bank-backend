@@ -1,5 +1,9 @@
 package com.nudgebank.bankbackend.loan.service;
 
+import com.nudgebank.bankbackend.certificate.domain.CertificateMaster;
+import com.nudgebank.bankbackend.certificate.domain.CertificateSubmission;
+import com.nudgebank.bankbackend.certificate.repository.CertificateMasterRepository;
+import com.nudgebank.bankbackend.certificate.repository.CertificateSubmissionRepository;
 import com.nudgebank.bankbackend.loan.domain.Loan;
 import com.nudgebank.bankbackend.loan.domain.LoanApplication;
 import com.nudgebank.bankbackend.loan.domain.LoanHistory;
@@ -26,12 +30,15 @@ public class MyLoanManagementService {
     private static final String SELF_DEVELOPMENT_TYPE = "SELF_DEVELOPMENT";
     private static final String CONSUMPTION_ANALYSIS_TYPE = "CONSUMPTION_ANALYSIS";
     private static final String EMERGENCY_TYPE = "EMERGENCY";
+    private static final String MATURITY_LUMP_SUM_TYPE = "MATURITY_LUMP_SUM";
 
     private final LoanApplicationRepository loanApplicationRepository;
     private final LoanHistoryRepository loanHistoryRepository;
     private final LoanRepository loanRepository;
     private final RepaymentScheduleRepository repaymentScheduleRepository;
     private final LoanRepaymentHistoryRepository loanRepaymentHistoryRepository;
+    private final CertificateSubmissionRepository certificateSubmissionRepository;
+    private final CertificateMasterRepository certificateMasterRepository;
 
     public MyLoanSummaryResponse getSummary(Long memberId, String productKey) {
         LoanHistory loanHistory = resolveLoanHistory(memberId, productKey).orElse(null);
@@ -55,6 +62,15 @@ public class MyLoanManagementService {
             .map(RepaymentSchedule::getPaidInterest)
             .map(this::nullSafe)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
+        LoanApplication loanApplication = loan != null ? loan.getLoanApplication() : ensureDisplayableLoanExists(memberId, productKey);
+        BigDecimal baseInterestRate = resolveBaseInterestRate(loanApplication);
+        BigDecimal minimumInterestRate = resolveMinimumInterestRate(loanApplication);
+        BigDecimal currentInterestRate = loan != null ? nullSafe(loan.getInterestRate()) : resolveInitialInterestRate(loanApplication);
+        BigDecimal preferentialRateDiscount = resolvePreferentialRateDiscount(
+            loanApplication.getId(),
+            baseInterestRate,
+            currentInterestRate
+        );
 
         return new MyLoanSummaryResponse(
             loanHistory.getId(),
@@ -62,7 +78,11 @@ public class MyLoanManagementService {
             totalPrincipal,
             remainingPrincipal,
             repaidPrincipal.max(BigDecimal.ZERO),
-            loan != null ? nullSafe(loan.getInterestRate()) : BigDecimal.ZERO,
+            baseInterestRate,
+            minimumInterestRate,
+            preferentialRateDiscount,
+            currentInterestRate,
+            loanApplication.getLoanProduct().getRepaymentType(),
             loanHistory.getStartDate(),
             loanHistory.getEndDate(),
             nextSchedule != null ? nextSchedule.getDueDate() : loanHistory.getExpectedRepaymentDate(),
@@ -117,9 +137,10 @@ public class MyLoanManagementService {
     private MyLoanSummaryResponse buildPendingLoanSummary(Long memberId, String productKey) {
         LoanApplication application = ensureDisplayableLoanExists(memberId, productKey);
         BigDecimal totalPrincipal = nullSafe(application.getLoanAmount());
-        BigDecimal interestRate = application.getLoanProduct().getMinInterestRate() != null
-            ? application.getLoanProduct().getMinInterestRate()
-            : BigDecimal.ZERO;
+        BigDecimal interestRate = resolveInitialInterestRate(application);
+        BigDecimal baseInterestRate = resolveBaseInterestRate(application);
+        BigDecimal minimumInterestRate = resolveMinimumInterestRate(application);
+        BigDecimal preferentialRateDiscount = resolvePreferentialRateDiscount(application.getId(), baseInterestRate, interestRate);
         int repaymentMonths = application.getLoanProduct().getRepaymentPeriodMonth() != null
             && application.getLoanProduct().getRepaymentPeriodMonth() > 0
             ? application.getLoanProduct().getRepaymentPeriodMonth()
@@ -127,9 +148,12 @@ public class MyLoanManagementService {
         LocalDate startDate = application.getAppliedAt() != null
             ? application.getAppliedAt().toLocalDate()
             : LocalDate.now();
-        BigDecimal nextPaymentAmount = repaymentMonths > 0
-            ? totalPrincipal.divide(BigDecimal.valueOf(repaymentMonths), 0, RoundingMode.UP)
-            : totalPrincipal;
+        BigDecimal nextPaymentAmount = resolvePendingNextPaymentAmount(
+            application,
+            totalPrincipal,
+            interestRate,
+            repaymentMonths
+        );
 
         return new MyLoanSummaryResponse(
             null,
@@ -137,7 +161,11 @@ public class MyLoanManagementService {
             totalPrincipal,
             totalPrincipal,
             BigDecimal.ZERO,
+            baseInterestRate,
+            minimumInterestRate,
+            preferentialRateDiscount,
             interestRate,
+            application.getLoanProduct().getRepaymentType(),
             startDate,
             startDate.plusMonths(repaymentMonths),
             startDate.plusMonths(1),
@@ -194,6 +222,67 @@ public class MyLoanManagementService {
         }
 
         return java.util.Optional.empty();
+    }
+
+    private BigDecimal resolveInitialInterestRate(LoanApplication application) {
+        if (SELF_DEVELOPMENT_TYPE.equals(application.getLoanProduct().getLoanProductType())
+            && application.getLoanProduct().getMaxInterestRate() != null) {
+            return application.getLoanProduct().getMaxInterestRate();
+        }
+
+        return application.getLoanProduct().getMinInterestRate() != null
+            ? application.getLoanProduct().getMinInterestRate()
+            : BigDecimal.ZERO;
+    }
+
+    private BigDecimal resolveBaseInterestRate(LoanApplication application) {
+        if (application.getLoanProduct().getMaxInterestRate() != null) {
+            return application.getLoanProduct().getMaxInterestRate();
+        }
+
+        return resolveInitialInterestRate(application);
+    }
+
+    private BigDecimal resolveMinimumInterestRate(LoanApplication application) {
+        return application.getLoanProduct().getMinInterestRate() != null
+            ? application.getLoanProduct().getMinInterestRate()
+            : BigDecimal.ZERO;
+    }
+
+    private BigDecimal resolvePreferentialRateDiscount(
+        Long loanApplicationId,
+        BigDecimal baseInterestRate,
+        BigDecimal currentInterestRate
+    ) {
+        BigDecimal persistedDiscount = baseInterestRate.subtract(currentInterestRate).max(BigDecimal.ZERO);
+        BigDecimal verifiedDiscount = certificateSubmissionRepository
+            .findAllByLoanApplicationIdAndVerificationStatus(loanApplicationId, "VERIFIED")
+            .stream()
+            .map(CertificateSubmission::getCertificateId)
+            .map(certificateId -> certificateMasterRepository.findByCertificateIdAndIsActiveTrue(certificateId)
+                .map(CertificateMaster::getRateDiscount)
+                .orElse(BigDecimal.ZERO))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        return persistedDiscount.max(verifiedDiscount);
+    }
+
+    private BigDecimal resolvePendingNextPaymentAmount(
+        LoanApplication application,
+        BigDecimal totalPrincipal,
+        BigDecimal interestRate,
+        int repaymentMonths
+    ) {
+        if (MATURITY_LUMP_SUM_TYPE.equals(application.getLoanProduct().getRepaymentType())) {
+            return totalPrincipal
+                .multiply(interestRate)
+                .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
+                .divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
+        }
+
+        return repaymentMonths > 0
+            ? totalPrincipal.divide(BigDecimal.valueOf(repaymentMonths), 0, RoundingMode.UP)
+            : totalPrincipal;
     }
 
     private String toLoanProductType(String productKey) {

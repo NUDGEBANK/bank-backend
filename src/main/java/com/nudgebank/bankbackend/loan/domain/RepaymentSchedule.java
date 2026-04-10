@@ -72,4 +72,8 @@ public class RepaymentSchedule {
         return schedule;
     }
 
+    public void updatePlannedInterest(BigDecimal plannedInterest) {
+        this.plannedInterest = plannedInterest;
+    }
+
 }
