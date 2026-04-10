@@ -123,7 +123,7 @@ public class LoanApplicationService {
     @Transactional
     public LoanApplicationSummaryResponse approve(Long applicationId, Long reviewerId)  {
         requireLoanReviewer(reviewerId);
-        LoanApplication application = loanApplicationRepository.findById(applicationId)
+        LoanApplication application = loanApplicationRepository.findByIdForUpdate(applicationId)
                 .orElseThrow(() -> new EntityNotFoundException("대출 신청을 찾을 수 없습니다. applicationId=" + applicationId));
 
         if (!application.isPendingReview()) {
