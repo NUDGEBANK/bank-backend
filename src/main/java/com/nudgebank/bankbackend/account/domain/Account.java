@@ -101,4 +101,24 @@ public class Account {
 
     this.balance = this.balance.add(amount);
   }
+
+  public void updateProtectedBalance(BigDecimal protectedBalance) {
+    if (protectedBalance == null) {
+      throw new IllegalArgumentException("보호잔액은 필수입니다.");
+    }
+
+    if (protectedBalance.compareTo(BigDecimal.ZERO) < 0) {
+      throw new IllegalArgumentException("보호잔액은 0 이상이어야 합니다.");
+    }
+
+    if (this.balance == null) {
+      throw new IllegalStateException("계좌 잔액 정보가 없습니다.");
+    }
+
+    if (protectedBalance.compareTo(this.balance) > 0) {
+      throw new IllegalArgumentException("보호잔액은 계좌 잔액보다 클 수 없습니다.");
+    }
+
+    this.protectedBalance = protectedBalance;
+  }
 }
