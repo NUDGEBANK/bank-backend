@@ -70,6 +70,10 @@ public class LoanApplicationService {
     private final MarketRepository marketRepository;
     private final MarketCategoryRepository marketCategoryRepository;
 
+    private static final int AUTO_APPROVAL_MIN_CREDIT_SCORE = 500;
+    private static final Long SYSTEM_REVIEWER_ID = 100L;
+    private static final String AUTO_REJECT_REASON = "신용점수 기준 미달";
+
     // submit(): 신청만 저장, loan_application만 생성, 상태는 PENDING
     @Transactional
     public LoanApplicationSummaryResponse submit(Long memberId, LoanApplicationCreateRequest request) {
@@ -112,13 +116,13 @@ public class LoanApplicationService {
                         .salaryDate(request.salaryDate())
                         .build()
         );
-
-        return toSummary(saved);
+        return autoReview(saved.getId()); // 자동심사
     }
 
     // approve(): 상태 승인 변경, loan, loan_history, repayment_schedule, 입금, 카드 거래 생성
     @Transactional
-    public LoanApplicationSummaryResponse approve(Long applicationId) {
+    public LoanApplicationSummaryResponse approve(Long applicationId, Long reviewerId)  {
+        requireLoanReviewer(reviewerId);
         LoanApplication application = loanApplicationRepository.findById(applicationId)
                 .orElseThrow(() -> new EntityNotFoundException("대출 신청을 찾을 수 없습니다. applicationId=" + applicationId));
 
@@ -158,6 +162,28 @@ public class LoanApplicationService {
         application.reject(reviewerId);
 
         return toSummary(application);
+    }
+
+    // 신용점수 기반 자동심사
+    @Transactional
+    public LoanApplicationSummaryResponse autoReview(Long applicationId) {
+        LoanApplication application = loanApplicationRepository.findByIdForUpdate(applicationId)
+                .orElseThrow(() -> new EntityNotFoundException("대출 신청을 찾을 수 없습니다. applicationId=" + applicationId));
+
+        if (application.getApplicationStatus() != LoanApplicationStatus.PENDING) {
+            return toSummary(application);
+        }
+
+        CreditHistory creditHistory = application.getCreditHistory();
+        int creditScore = creditHistory != null && creditHistory.getCreditScore() != null
+                ? creditHistory.getCreditScore()
+                : 0;
+
+        if (creditScore >= AUTO_APPROVAL_MIN_CREDIT_SCORE) {
+            return approve(applicationId, SYSTEM_REVIEWER_ID);
+        }
+
+        return reject(applicationId, SYSTEM_REVIEWER_ID, AUTO_REJECT_REASON);
     }
 
     private Member requireLoanReviewer(Long reviewerId) {

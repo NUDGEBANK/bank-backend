@@ -47,7 +47,7 @@ public class LoanApplicationController {
         if (reviewerId == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         }
-        return loanApplicationService.approve(applicationId);
+        return loanApplicationService.approve(applicationId, reviewerId);
     }
 
     // 대출 거절
