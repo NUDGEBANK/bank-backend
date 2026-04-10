@@ -8,5 +8,6 @@ public record LoanApplicationCreateRequest(
     String loanTerm,
     BigDecimal monthlyIncome,
     Integer salaryDate,
-    String purpose
+    String purpose,
+    Long cardId
 ) {}
