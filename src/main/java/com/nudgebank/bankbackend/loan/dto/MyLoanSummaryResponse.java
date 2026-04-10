@@ -17,7 +17,10 @@ public record MyLoanSummaryResponse(
     LocalDate startDate,
     LocalDate endDate,
     LocalDate nextPaymentDate,
+    BigDecimal nextPaymentPrincipal,
+    BigDecimal nextPaymentInterest,
     BigDecimal nextPaymentAmount,
     BigDecimal cumulativeInterest,
+    BigDecimal remainingInterestAmount,
     String repaymentAccountNumber
 ) {}

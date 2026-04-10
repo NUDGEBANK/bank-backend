@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 @Service
@@ -62,6 +63,10 @@ public class MyLoanManagementService {
             .map(RepaymentSchedule::getPaidInterest)
             .map(this::nullSafe)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal remainingInterestAmount = schedules.stream()
+            .filter(schedule -> !Boolean.TRUE.equals(schedule.getIsSettled()))
+            .map(schedule -> nullSafe(schedule.getPlannedInterest()).subtract(nullSafe(schedule.getPaidInterest())).max(BigDecimal.ZERO))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
         LoanApplication loanApplication = loan != null ? loan.getLoanApplication() : ensureDisplayableLoanExists(memberId, productKey);
         BigDecimal baseInterestRate = resolveBaseInterestRate(loanApplication);
         BigDecimal minimumInterestRate = resolveMinimumInterestRate(loanApplication);
@@ -86,10 +91,13 @@ public class MyLoanManagementService {
             loanHistory.getStartDate(),
             loanHistory.getEndDate(),
             nextSchedule != null ? nextSchedule.getDueDate() : loanHistory.getExpectedRepaymentDate(),
+            nextSchedule != null ? nullSafe(nextSchedule.getPlannedPrincipal()) : BigDecimal.ZERO,
+            nextSchedule != null ? nullSafe(nextSchedule.getPlannedInterest()) : BigDecimal.ZERO,
             nextSchedule != null
                 ? nullSafe(nextSchedule.getPlannedPrincipal()).add(nullSafe(nextSchedule.getPlannedInterest()))
                 : BigDecimal.ZERO,
             cumulativeInterest,
+            remainingInterestAmount,
             loanHistory.getRepaymentAccountNumber()
         );
     }
@@ -110,7 +118,7 @@ public class MyLoanManagementService {
                 nullSafe(schedule.getPaidPrincipal()),
                 nullSafe(schedule.getPaidInterest()),
                 Boolean.TRUE.equals(schedule.getIsSettled()),
-                schedule.getOverdueDays()
+                resolveOverdueDays(schedule)
             ))
             .toList();
     }
@@ -169,8 +177,11 @@ public class MyLoanManagementService {
             startDate,
             startDate.plusMonths(repaymentMonths),
             startDate.plusMonths(1),
+            resolvePendingNextPaymentPrincipal(application, totalPrincipal, repaymentMonths),
+            resolvePendingNextPaymentInterest(application, totalPrincipal, interestRate),
             nextPaymentAmount,
             BigDecimal.ZERO,
+            resolvePendingRemainingInterestAmount(application, totalPrincipal, interestRate, repaymentMonths),
             null
         );
     }
@@ -273,16 +284,79 @@ public class MyLoanManagementService {
         BigDecimal interestRate,
         int repaymentMonths
     ) {
+        return resolvePendingNextPaymentPrincipal(application, totalPrincipal, repaymentMonths)
+            .add(resolvePendingNextPaymentInterest(application, totalPrincipal, interestRate));
+    }
+
+    private BigDecimal resolvePendingNextPaymentPrincipal(
+        LoanApplication application,
+        BigDecimal totalPrincipal,
+        int repaymentMonths
+    ) {
         if (MATURITY_LUMP_SUM_TYPE.equals(application.getLoanProduct().getRepaymentType())) {
-            return totalPrincipal
-                .multiply(interestRate)
-                .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
-                .divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
+            return BigDecimal.ZERO;
         }
 
         return repaymentMonths > 0
             ? totalPrincipal.divide(BigDecimal.valueOf(repaymentMonths), 0, RoundingMode.UP)
             : totalPrincipal;
+    }
+
+    private BigDecimal resolvePendingNextPaymentInterest(
+        LoanApplication application,
+        BigDecimal totalPrincipal,
+        BigDecimal interestRate
+    ) {
+        if (totalPrincipal.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO;
+        }
+
+        return totalPrincipal
+            .multiply(interestRate)
+            .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
+            .divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal resolvePendingRemainingInterestAmount(
+        LoanApplication application,
+        BigDecimal totalPrincipal,
+        BigDecimal interestRate,
+        int repaymentMonths
+    ) {
+        if (MATURITY_LUMP_SUM_TYPE.equals(application.getLoanProduct().getRepaymentType())) {
+            return resolvePendingNextPaymentInterest(application, totalPrincipal, interestRate)
+                .multiply(BigDecimal.valueOf(repaymentMonths));
+        }
+
+        BigDecimal remainingPrincipal = totalPrincipal;
+        BigDecimal monthlyPrincipal = repaymentMonths > 0
+            ? totalPrincipal.divide(BigDecimal.valueOf(repaymentMonths), 2, RoundingMode.DOWN)
+            : totalPrincipal;
+        BigDecimal allocatedPrincipal = BigDecimal.ZERO;
+        BigDecimal remainingInterest = BigDecimal.ZERO;
+
+        for (int month = 1; month <= repaymentMonths; month++) {
+            BigDecimal plannedPrincipal = month == repaymentMonths
+                ? totalPrincipal.subtract(allocatedPrincipal)
+                : monthlyPrincipal;
+            remainingInterest = remainingInterest.add(
+                resolvePendingNextPaymentInterest(application, remainingPrincipal, interestRate)
+            );
+            allocatedPrincipal = allocatedPrincipal.add(plannedPrincipal);
+            remainingPrincipal = remainingPrincipal.subtract(plannedPrincipal).max(BigDecimal.ZERO);
+        }
+
+        return remainingInterest;
+    }
+
+    private Integer resolveOverdueDays(RepaymentSchedule schedule) {
+        if (Boolean.TRUE.equals(schedule.getIsSettled()) || schedule.getDueDate() == null) {
+            return schedule.getOverdueDays();
+        }
+
+        long calculated = Math.max(0, ChronoUnit.DAYS.between(schedule.getDueDate(), LocalDate.now()));
+        int existing = schedule.getOverdueDays() != null ? schedule.getOverdueDays() : 0;
+        return Math.max(existing, (int) calculated);
     }
 
     private String toLoanProductType(String productKey) {
