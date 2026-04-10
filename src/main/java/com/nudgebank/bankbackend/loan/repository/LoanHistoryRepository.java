@@ -17,4 +17,14 @@ public interface LoanHistoryRepository extends JpaRepository<LoanHistory, Long> 
         java.math.BigDecimal totalPrincipal,
         java.time.LocalDate startDate
     );
+
+    Optional<LoanHistory> findTopByMember_MemberIdAndCard_CardIdAndTotalPrincipalAndStartDateAndEndDateOrderByCreatedAtDesc(
+        Long memberId,
+        Long cardId,
+        java.math.BigDecimal totalPrincipal,
+        java.time.LocalDate startDate,
+        java.time.LocalDate endDate
+    );
+
+    boolean existsByRepaymentAccountNumber(String repaymentAccountNumber);
 }

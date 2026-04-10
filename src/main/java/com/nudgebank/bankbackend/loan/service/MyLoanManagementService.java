@@ -177,22 +177,23 @@ public class MyLoanManagementService {
     }
 
     private java.util.Optional<LoanHistory> resolveLoanHistory(Long memberId, String productKey) {
+        Loan loan = resolveLoan(memberId, productKey).orElse(null);
+        if (loan != null && loan.getLoanApplication() != null && loan.getLoanApplication().getCard() != null) {
+            return loanHistoryRepository
+                .findTopByMember_MemberIdAndCard_CardIdAndTotalPrincipalAndStartDateAndEndDateOrderByCreatedAtDesc(
+                    memberId,
+                    loan.getLoanApplication().getCard().getCardId(),
+                    nullSafe(loan.getPrincipalAmount()),
+                    loan.getStartDate(),
+                    loan.getEndDate()
+                );
+        }
+
         if (productKey == null || productKey.isBlank()) {
             return loanHistoryRepository.findTopByMember_MemberIdOrderByCreatedAtDesc(memberId);
         }
 
-        Loan loan = resolveLoan(memberId, productKey).orElse(null);
-        if (loan == null || loan.getLoanApplication() == null || loan.getLoanApplication().getCard() == null) {
-            return java.util.Optional.empty();
-        }
-
-        return loanHistoryRepository
-            .findTopByMember_MemberIdAndCard_CardIdAndTotalPrincipalAndStartDateOrderByCreatedAtDesc(
-                memberId,
-                loan.getLoanApplication().getCard().getCardId(),
-                nullSafe(loan.getPrincipalAmount()),
-                loan.getStartDate()
-            );
+        return java.util.Optional.empty();
     }
 
     private String toLoanProductType(String productKey) {
@@ -204,7 +205,7 @@ public class MyLoanManagementService {
             case "youth-loan" -> SELF_DEVELOPMENT_TYPE;
             case "consumption-loan" -> CONSUMPTION_ANALYSIS_TYPE;
             case "situate-loan" -> EMERGENCY_TYPE;
-            default -> null;
+            default -> throw new IllegalArgumentException("지원하지 않는 상품입니다. productKey=" + productKey);
         };
     }
 

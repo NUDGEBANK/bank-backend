@@ -36,6 +36,7 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -218,24 +219,18 @@ public class LoanApplicationService {
     }
 
     private Card resolveSelectedCard(Long memberId, Long requestedCardId) {
-        if (requestedCardId != null) {
-            Card card = cardRepository.findById(requestedCardId)
-                .orElseThrow(() -> new EntityNotFoundException("대출 신청 카드를 찾을 수 없습니다."));
-            Account cardAccount = accountRepository.findById(card.getAccountId())
-                .orElseThrow(() -> new EntityNotFoundException("대출 신청 카드의 계좌를 찾을 수 없습니다."));
-            if (!memberId.equals(cardAccount.getMemberId())) {
-                throw new IllegalArgumentException("요청한 카드를 사용할 수 없습니다.");
-            }
-            return card;
+        if (requestedCardId == null) {
+            throw new IllegalArgumentException("대출 신청 카드를 선택해 주세요.");
         }
 
-        List<Account> accounts = accountRepository.findAllByMemberId(memberId);
-        if (accounts.isEmpty()) {
-            throw new EntityNotFoundException("대출 실행 계좌를 찾을 수 없습니다.");
+        Card card = cardRepository.findById(requestedCardId)
+            .orElseThrow(() -> new EntityNotFoundException("대출 신청 카드를 찾을 수 없습니다."));
+        Account cardAccount = accountRepository.findById(card.getAccountId())
+            .orElseThrow(() -> new EntityNotFoundException("대출 신청 카드의 계좌를 찾을 수 없습니다."));
+        if (!memberId.equals(cardAccount.getMemberId())) {
+            throw new IllegalArgumentException("요청한 카드를 사용할 수 없습니다.");
         }
-
-        return cardRepository.findByAccountId(accounts.get(0).getAccountId())
-            .orElseThrow(() -> new EntityNotFoundException("대출 실행에 사용할 카드가 없습니다."));
+        return card;
     }
 
     private synchronized MarketCategory resolveLoanCategory() {
@@ -351,8 +346,13 @@ public class LoanApplicationService {
     }
 
     private String generateVirtualAccountNumber() {
-        long first = ThreadLocalRandom.current().nextLong(1_000_000L, 10_000_000L);
-        long second = ThreadLocalRandom.current().nextLong(1_000_000L, 10_000_000L);
-        return first + "-" + second;
+        for (int attempt = 0; attempt < 5; attempt++) {
+            String candidate = "VA-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase();
+            if (!loanHistoryRepository.existsByRepaymentAccountNumber(candidate)) {
+                return candidate;
+            }
+        }
+
+        throw new IllegalStateException("가상계좌 번호 생성에 실패했습니다.");
     }
 }
