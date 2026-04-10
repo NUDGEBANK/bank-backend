@@ -35,7 +35,6 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -55,6 +54,7 @@ public class LoanApplicationService {
     private static final String LOAN_CATEGORY_NAME = "대출";
     private static final String LOAN_MARKET_NAME = "NudgeBank 대출 실행";
     private static final String LOAN_CATEGORY_MCC = "LOAN";
+    private static final String MATURITY_LUMP_SUM_TYPE = "MATURITY_LUMP_SUM";
 
     private final LoanApplicationRepository loanApplicationRepository;
     private final LoanProductRepository loanProductRepository;
@@ -155,9 +155,7 @@ public class LoanApplicationService {
         int repaymentMonths = resolveRepaymentMonths(loanApplication);
         LocalDate endDate = startDate.plusMonths(repaymentMonths);
         BigDecimal principalAmount = nullSafe(loanApplication.getLoanAmount());
-        BigDecimal interestRate = loanApplication.getLoanProduct().getMinInterestRate() != null
-            ? loanApplication.getLoanProduct().getMinInterestRate()
-            : BigDecimal.ZERO;
+        BigDecimal interestRate = resolveInitialInterestRate(loanApplication.getLoanProduct());
 
         loanRepository.save(
             Loan.builder()
@@ -187,7 +185,14 @@ public class LoanApplicationService {
         );
 
         repaymentScheduleRepository.saveAll(
-            buildRepaymentSchedules(loanHistory, principalAmount, interestRate, startDate, repaymentMonths)
+            buildRepaymentSchedules(
+                loanHistory,
+                principalAmount,
+                interestRate,
+                startDate,
+                repaymentMonths,
+                loanApplication.getLoanProduct().getRepaymentType()
+            )
         );
 
         repaymentAccount.deposit(principalAmount);
@@ -248,18 +253,25 @@ public class LoanApplicationService {
         BigDecimal principalAmount,
         BigDecimal annualInterestRate,
         LocalDate startDate,
-        int repaymentMonths
+        int repaymentMonths,
+        String repaymentType
     ) {
         List<RepaymentSchedule> schedules = new ArrayList<>();
         BigDecimal remainingPrincipal = principalAmount;
         BigDecimal monthlyPrincipal = principalAmount
             .divide(BigDecimal.valueOf(repaymentMonths), 2, RoundingMode.DOWN);
         BigDecimal allocatedPrincipal = BigDecimal.ZERO;
+        boolean maturityLumpSum = MATURITY_LUMP_SUM_TYPE.equals(repaymentType);
 
         for (int month = 1; month <= repaymentMonths; month++) {
-            BigDecimal plannedPrincipal = month == repaymentMonths
-                ? principalAmount.subtract(allocatedPrincipal)
-                : monthlyPrincipal;
+            BigDecimal plannedPrincipal;
+            if (maturityLumpSum) {
+                plannedPrincipal = month == repaymentMonths ? principalAmount : BigDecimal.ZERO;
+            } else {
+                plannedPrincipal = month == repaymentMonths
+                    ? principalAmount.subtract(allocatedPrincipal)
+                    : monthlyPrincipal;
+            }
             BigDecimal plannedInterest = remainingPrincipal
                 .multiply(annualInterestRate)
                 .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
@@ -296,6 +308,17 @@ public class LoanApplicationService {
         }
 
         return 12;
+    }
+
+    private BigDecimal resolveInitialInterestRate(LoanProduct loanProduct) {
+        if (SELF_DEVELOPMENT_TYPE.equals(loanProduct.getLoanProductType())
+            && loanProduct.getMaxInterestRate() != null) {
+            return loanProduct.getMaxInterestRate();
+        }
+
+        return loanProduct.getMinInterestRate() != null
+            ? loanProduct.getMinInterestRate()
+            : BigDecimal.ZERO;
     }
 
     private LoanApplicationSummaryResponse toSummary(LoanApplication loanApplication) {
