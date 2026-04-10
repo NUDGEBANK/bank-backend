@@ -1,8 +1,11 @@
 package com.nudgebank.bankbackend.loan.repository;
 
 import com.nudgebank.bankbackend.loan.domain.Loan;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface LoanRepository extends JpaRepository<Loan, Long> {
 
@@ -14,4 +17,14 @@ public interface LoanRepository extends JpaRepository<Loan, Long> {
         Long memberId,
         String loanProductType
     );
+
+    @Query("""
+        select distinct l.member.memberId
+        from Loan l
+        join l.loanApplication la
+        join la.loanProduct lp
+        where lp.loanProductType = :loanProductType
+          and l.status <> 'COMPLETED'
+    """)
+    List<Long> findDistinctMemberIdsByLoanProductTypeAndActive(@Param("loanProductType") String loanProductType);
 }
