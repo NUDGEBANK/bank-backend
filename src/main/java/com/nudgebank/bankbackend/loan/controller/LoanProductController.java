@@ -26,4 +26,7 @@ public class LoanProductController {
     public LoanProductDetailResponse getLoanProductDetail(@PathVariable Long loanProductId) {
         return loanProductService.getLoanProductDetail(loanProductId);
     }
+
+    // 신용점수 기반 대출 가능 여부 조회
+
 }
