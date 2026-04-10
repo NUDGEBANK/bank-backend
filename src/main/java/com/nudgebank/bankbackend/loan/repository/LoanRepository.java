@@ -7,4 +7,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface LoanRepository extends JpaRepository<Loan, Long> {
 
     Optional<Loan> findTopByMember_MemberIdOrderByStartDateDescIdDesc(Long memberId);
+
+    Optional<Loan> findTopByMember_MemberIdAndLoanApplication_LoanProduct_LoanProductTypeOrderByStartDateDescIdDesc(
+        Long memberId,
+        String loanProductType
+    );
 }

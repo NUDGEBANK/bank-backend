@@ -53,6 +53,14 @@ services:
     networks:
       - nudge-net
 
+  bank-chatbot:
+    build: ../bank-chatbot
+    container_name: nudge-bank-chatbot
+    env_file:
+      - .env
+    networks:
+      - nudge-net
+
 networks:
   nudge-net:
 

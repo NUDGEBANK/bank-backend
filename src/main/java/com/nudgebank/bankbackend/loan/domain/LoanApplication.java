@@ -1,6 +1,7 @@
 package com.nudgebank.bankbackend.loan.domain;
 
 import com.nudgebank.bankbackend.auth.domain.Member;
+import com.nudgebank.bankbackend.card.domain.Card;
 import com.nudgebank.bankbackend.credit.domain.CreditHistory;
 import jakarta.persistence.*;
 import lombok.*;
@@ -32,6 +33,10 @@ public class LoanApplication {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "credit_history_id", nullable = false)
     private CreditHistory creditHistory;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "card_id", nullable = false)
+    private Card card;
 
     @Column(name = "loan_amount", precision = 15, scale = 2)
     private BigDecimal loanAmount;
