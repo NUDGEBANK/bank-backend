@@ -65,9 +65,12 @@ public class MyLoanManagementService {
         LoanApplication loanApplication = loan != null ? loan.getLoanApplication() : ensureDisplayableLoanExists(memberId, productKey);
         BigDecimal baseInterestRate = resolveBaseInterestRate(loanApplication);
         BigDecimal minimumInterestRate = resolveMinimumInterestRate(loanApplication);
-        BigDecimal preferentialRateDiscount = baseInterestRate.subtract(
-            loan != null ? nullSafe(loan.getInterestRate()) : BigDecimal.ZERO
-        ).max(BigDecimal.ZERO);
+        BigDecimal currentInterestRate = loan != null ? nullSafe(loan.getInterestRate()) : resolveInitialInterestRate(loanApplication);
+        BigDecimal preferentialRateDiscount = resolvePreferentialRateDiscount(
+            loanApplication.getId(),
+            baseInterestRate,
+            currentInterestRate
+        );
 
         return new MyLoanSummaryResponse(
             loanHistory.getId(),
@@ -78,7 +81,7 @@ public class MyLoanManagementService {
             baseInterestRate,
             minimumInterestRate,
             preferentialRateDiscount,
-            loan != null ? nullSafe(loan.getInterestRate()) : BigDecimal.ZERO,
+            currentInterestRate,
             loanApplication.getLoanProduct().getRepaymentType(),
             loanHistory.getStartDate(),
             loanHistory.getEndDate(),

@@ -311,14 +311,11 @@ public class LoanApplicationService {
     }
 
     private BigDecimal resolveInitialInterestRate(LoanProduct loanProduct) {
-        if (SELF_DEVELOPMENT_TYPE.equals(loanProduct.getLoanProductType())
-            && loanProduct.getMaxInterestRate() != null) {
-            return loanProduct.getMaxInterestRate();
+        if (SELF_DEVELOPMENT_TYPE.equals(loanProduct.getLoanProductType())) {
+            return requireInterestRate(loanProduct, true);
         }
 
-        return loanProduct.getMinInterestRate() != null
-            ? loanProduct.getMinInterestRate()
-            : BigDecimal.ZERO;
+        return requireInterestRate(loanProduct, false);
     }
 
     private LoanApplicationSummaryResponse toSummary(LoanApplication loanApplication) {
@@ -366,6 +363,17 @@ public class LoanApplicationService {
 
     private BigDecimal nullSafe(BigDecimal value) {
         return value != null ? value : BigDecimal.ZERO;
+    }
+
+    private BigDecimal requireInterestRate(LoanProduct loanProduct, boolean baseRate) {
+        BigDecimal rate = baseRate ? loanProduct.getMaxInterestRate() : loanProduct.getMinInterestRate();
+        if (rate == null) {
+            throw new IllegalStateException(
+                baseRate ? "대출 상품 기준 금리가 설정되지 않았습니다."
+                    : "대출 상품 최저 금리가 설정되지 않았습니다."
+            );
+        }
+        return rate;
     }
 
     private String generateVirtualAccountNumber() {

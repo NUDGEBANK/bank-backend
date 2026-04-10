@@ -9,8 +9,11 @@ import com.nudgebank.bankbackend.certificate.dto.CertificateSubmissionResponse;
 import com.nudgebank.bankbackend.certificate.repository.CertificateMasterRepository;
 import com.nudgebank.bankbackend.certificate.repository.CertificateSubmissionRepository;
 import com.nudgebank.bankbackend.loan.domain.Loan;
+import com.nudgebank.bankbackend.loan.domain.LoanApplication;
 import com.nudgebank.bankbackend.loan.domain.LoanHistory;
+import com.nudgebank.bankbackend.loan.domain.LoanProduct;
 import com.nudgebank.bankbackend.loan.domain.RepaymentSchedule;
+import com.nudgebank.bankbackend.loan.repository.LoanApplicationRepository;
 import com.nudgebank.bankbackend.loan.repository.LoanHistoryRepository;
 import com.nudgebank.bankbackend.loan.repository.LoanRepository;
 import com.nudgebank.bankbackend.loan.repository.RepaymentScheduleRepository;
@@ -28,10 +31,12 @@ import java.util.List;
 
 @Service
 public class CertificateSubmissionService {
+    private static final String SELF_DEVELOPMENT_TYPE = "SELF_DEVELOPMENT";
 
     private final MemberRepository memberRepository;
     private final CertificateMasterRepository certificateMasterRepository;
     private final CertificateSubmissionRepository certificateSubmissionRepository;
+    private final LoanApplicationRepository loanApplicationRepository;
     private final LoanRepository loanRepository;
     private final LoanHistoryRepository loanHistoryRepository;
     private final RepaymentScheduleRepository repaymentScheduleRepository;
@@ -42,6 +47,7 @@ public class CertificateSubmissionService {
             MemberRepository memberRepository,
             CertificateMasterRepository certificateMasterRepository,
             CertificateSubmissionRepository certificateSubmissionRepository,
+            LoanApplicationRepository loanApplicationRepository,
             LoanRepository loanRepository,
             LoanHistoryRepository loanHistoryRepository,
             RepaymentScheduleRepository repaymentScheduleRepository,
@@ -51,6 +57,7 @@ public class CertificateSubmissionService {
         this.memberRepository = memberRepository;
         this.certificateMasterRepository = certificateMasterRepository;
         this.certificateSubmissionRepository = certificateSubmissionRepository;
+        this.loanApplicationRepository = loanApplicationRepository;
         this.loanRepository = loanRepository;
         this.loanHistoryRepository = loanHistoryRepository;
         this.repaymentScheduleRepository = repaymentScheduleRepository;
@@ -120,6 +127,12 @@ public class CertificateSubmissionService {
         if (file == null || file.isEmpty()) {
             throw new InvalidCertificateUploadException("Certificate file is required");
         }
+
+        LoanApplication loanApplication = loanApplicationRepository.findByIdAndMember_MemberId(loanApplicationId, memberId)
+            .orElseThrow(() -> new InvalidCertificateUploadException("대출 신청 정보를 찾을 수 없습니다."));
+        if (!SELF_DEVELOPMENT_TYPE.equals(loanApplication.getLoanProduct().getLoanProductType())) {
+            throw new InvalidCertificateUploadException("자기계발 대출에만 자격증 우대금리를 적용할 수 있습니다.");
+        }
     }
 
     private void validateDuplicateVerifiedCertificate(Long memberId, Long certificateId) {
@@ -136,6 +149,8 @@ public class CertificateSubmissionService {
     }
 
     private void applyPreferentialRate(Long loanApplicationId) {
+        LoanApplication loanApplication = loanApplicationRepository.findById(loanApplicationId)
+                .orElseThrow(() -> new InvalidCertificateUploadException("대출 신청 정보를 찾을 수 없습니다."));
         Loan loan = loanRepository.findTopByLoanApplication_IdOrderByIdDesc(loanApplicationId)
                 .orElseThrow(() -> new InvalidCertificateUploadException("대출 정보를 찾을 수 없습니다."));
 
@@ -158,12 +173,8 @@ public class CertificateSubmissionService {
                         .orElse(BigDecimal.ZERO))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal baseRate = loan.getLoanApplication().getLoanProduct().getMaxInterestRate() != null
-                ? loan.getLoanApplication().getLoanProduct().getMaxInterestRate()
-                : nullSafe(loan.getInterestRate());
-        BigDecimal minimumRate = loan.getLoanApplication().getLoanProduct().getMinInterestRate() != null
-                ? loan.getLoanApplication().getLoanProduct().getMinInterestRate()
-                : BigDecimal.ZERO;
+        BigDecimal baseRate = requireInterestRate(loanApplication.getLoanProduct(), true);
+        BigDecimal minimumRate = requireInterestRate(loanApplication.getLoanProduct(), false);
         BigDecimal nextRate = baseRate.subtract(totalDiscount).max(minimumRate);
 
         loan.updateInterestRate(nextRate);
@@ -193,5 +204,16 @@ public class CertificateSubmissionService {
 
     private BigDecimal nullSafe(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
+    }
+
+    private BigDecimal requireInterestRate(LoanProduct loanProduct, boolean baseRate) {
+        BigDecimal rate = baseRate ? loanProduct.getMaxInterestRate() : loanProduct.getMinInterestRate();
+        if (rate == null) {
+            throw new IllegalStateException(
+                baseRate ? "대출 상품 기준 금리가 설정되지 않았습니다."
+                    : "대출 상품 최저 금리가 설정되지 않았습니다."
+            );
+        }
+        return rate;
     }
 }
