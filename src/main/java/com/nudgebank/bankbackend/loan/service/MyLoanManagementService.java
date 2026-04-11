@@ -210,7 +210,7 @@ public class MyLoanManagementService {
             return repaymentPeriodMonth;
         }
 
-        return 1;
+        return 12;
     }
 
     private LoanApplication ensureDisplayableLoanExists(Long memberId, String productKey) {
