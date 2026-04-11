@@ -5,6 +5,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 
 @Entity
@@ -100,5 +101,33 @@ public class Account {
     }
 
     this.balance = this.balance.add(amount);
+  }
+
+  public void updateProtectedBalance(BigDecimal protectedBalance) {
+    if (protectedBalance == null) {
+      throw new IllegalArgumentException("보호잔액은 필수입니다.");
+    }
+
+    if (protectedBalance.compareTo(BigDecimal.ZERO) < 0) {
+      throw new IllegalArgumentException("보호잔액은 0 이상이어야 합니다.");
+    }
+
+    if (this.balance == null) {
+      throw new IllegalStateException("계좌 잔액 정보가 없습니다.");
+    }
+
+    if (protectedBalance.compareTo(this.balance) > 0) {
+      throw new IllegalArgumentException("보호잔액은 계좌 잔액보다 클 수 없습니다.");
+    }
+
+    this.protectedBalance = normalizeProtectedBalanceScale(protectedBalance);
+  }
+
+  private BigDecimal normalizeProtectedBalanceScale(BigDecimal protectedBalance) {
+    try {
+      return protectedBalance.setScale(2, RoundingMode.UNNECESSARY);
+    } catch (ArithmeticException exception) {
+      throw new IllegalArgumentException("보호잔액은 소수점 둘째 자리까지만 입력할 수 있습니다.");
+    }
   }
 }
