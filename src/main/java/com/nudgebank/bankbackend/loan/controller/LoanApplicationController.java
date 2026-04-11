@@ -27,6 +27,21 @@ public class LoanApplicationController {
         @RequestBody LoanApplicationCreateRequest request,
         Authentication authentication
     ) {
+        return createApplication(request, authentication);
+    }
+
+    @PostMapping("/submit")
+    public LoanApplicationSummaryResponse createLegacy(
+        @RequestBody LoanApplicationCreateRequest request,
+        Authentication authentication
+    ) {
+        return createApplication(request, authentication);
+    }
+
+    private LoanApplicationSummaryResponse createApplication(
+        LoanApplicationCreateRequest request,
+        Authentication authentication
+    ) {
         Long memberId = SecurityUtil.extractUserId(authentication);
         if (memberId == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
