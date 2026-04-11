@@ -59,9 +59,9 @@ public class LoanRepaymentService {
     public LoanRepaymentExecuteResponse repay(Long memberId, String productKey, BigDecimal requestedAmount) {
         ResolvedLoan resolvedLoan = resolveLoan(memberId, productKey);
         refreshEqualInstallmentSchedulesIfNeeded(resolvedLoan.loanHistory(), resolvedLoan.loan());
-        List<RepaymentSchedule> targetSchedules = resolveTargetSchedules(resolvedLoan.loanHistory());
+        List<RepaymentSchedule> targetSchedules = resolveTargetSchedules(resolvedLoan.loanHistory(), resolvedLoan.loan());
         if (targetSchedules.isEmpty()) {
-            throw new IllegalStateException("상환할 예정 회차가 없습니다.");
+            throw new IllegalArgumentException("현재 도래한 상환 회차가 없습니다.");
         }
 
         BigDecimal payableAmount = calculatePayableAmount(targetSchedules, resolvedLoan.loan(), true);
@@ -341,7 +341,7 @@ public class LoanRepaymentService {
         return total.setScale(2, RoundingMode.HALF_UP);
     }
 
-    private List<RepaymentSchedule> resolveTargetSchedules(LoanHistory loanHistory) {
+    private List<RepaymentSchedule> resolveTargetSchedules(LoanHistory loanHistory, Loan loan) {
         List<RepaymentSchedule> unsettledSchedules =
             repaymentScheduleRepository.findAllUnsettledByLoanHistoryIdForUpdate(loanHistory.getId());
         if (unsettledSchedules.isEmpty()) {
@@ -354,6 +354,17 @@ public class LoanRepaymentService {
 
         if (!dueSchedules.isEmpty()) {
             return dueSchedules;
+        }
+
+        if (isConsumptionAnalysisLoan(loan)) {
+            boolean hasPrepaidFutureSchedule = repaymentScheduleRepository
+                .findAllByLoanHistory_IdOrderByDueDateAsc(loanHistory.getId()).stream()
+                .anyMatch(schedule -> Boolean.TRUE.equals(schedule.getIsSettled())
+                    && schedule.getDueDate() != null
+                    && schedule.getDueDate().isAfter(LocalDate.now()));
+            if (hasPrepaidFutureSchedule) {
+                return List.of();
+            }
         }
 
         return List.of(unsettledSchedules.get(0));
@@ -430,13 +441,24 @@ public class LoanRepaymentService {
         BigDecimal remainingPrincipal = nullSafe(loanHistory.getRemainingPrincipal());
         boolean changed = false;
 
-        for (int index = 0; index < unsettledSchedules.size(); index++) {
-            RepaymentSchedule schedule = unsettledSchedules.get(index);
+        int remainingUntouchedSchedules = (int) unsettledSchedules.stream()
+            .filter(schedule -> !hasRecordedPayment(schedule))
+            .count();
+
+        for (RepaymentSchedule schedule : unsettledSchedules) {
+            if (hasRecordedPayment(schedule)) {
+                if (schedule.normalizePaidAmounts()) {
+                    changed = true;
+                }
+                remainingPrincipal = remainingPrincipal.subtract(nullSafe(schedule.getRemainingPlannedPrincipal())).max(BigDecimal.ZERO);
+                continue;
+            }
+
             BigDecimal plannedInterest = remainingPrincipal
                 .multiply(nullSafe(loan.getInterestRate()))
                 .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
                 .divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
-            BigDecimal plannedPrincipal = index == unsettledSchedules.size() - 1
+            BigDecimal plannedPrincipal = remainingUntouchedSchedules == 1
                 ? remainingPrincipal
                 : monthlyPayment.subtract(plannedInterest).max(BigDecimal.ZERO);
 
@@ -447,6 +469,7 @@ public class LoanRepaymentService {
             }
 
             remainingPrincipal = remainingPrincipal.subtract(plannedPrincipal).max(BigDecimal.ZERO);
+            remainingUntouchedSchedules--;
         }
 
         if (changed) {
@@ -494,6 +517,11 @@ public class LoanRepaymentService {
             && loan.getLoanApplication() != null
             && loan.getLoanApplication().getLoanProduct() != null
             && CONSUMPTION_ANALYSIS_TYPE.equals(loan.getLoanApplication().getLoanProduct().getLoanProductType());
+    }
+
+    private boolean hasRecordedPayment(RepaymentSchedule schedule) {
+        return nullSafe(schedule.getPaidPrincipal()).compareTo(BigDecimal.ZERO) > 0
+            || nullSafe(schedule.getPaidInterest()).compareTo(BigDecimal.ZERO) > 0;
     }
 
     private String resolveManualRepaymentMenuName(Loan loan) {

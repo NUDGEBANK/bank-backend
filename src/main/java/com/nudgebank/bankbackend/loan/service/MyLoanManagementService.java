@@ -481,13 +481,24 @@ public class MyLoanManagementService {
         BigDecimal remainingPrincipal = nullSafe(loanHistory.getRemainingPrincipal());
         boolean changed = false;
 
-        for (int index = 0; index < unsettledSchedules.size(); index++) {
-            RepaymentSchedule schedule = unsettledSchedules.get(index);
+        int remainingUntouchedSchedules = (int) unsettledSchedules.stream()
+            .filter(schedule -> !hasRecordedPayment(schedule))
+            .count();
+
+        for (RepaymentSchedule schedule : unsettledSchedules) {
+            if (hasRecordedPayment(schedule)) {
+                if (schedule.normalizePaidAmounts()) {
+                    changed = true;
+                }
+                remainingPrincipal = remainingPrincipal.subtract(nullSafe(schedule.getRemainingPlannedPrincipal())).max(BigDecimal.ZERO);
+                continue;
+            }
+
             BigDecimal plannedInterest = remainingPrincipal
                 .multiply(annualInterestRate)
                 .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
                 .divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
-            BigDecimal plannedPrincipal = index == unsettledSchedules.size() - 1
+            BigDecimal plannedPrincipal = remainingUntouchedSchedules == 1
                 ? remainingPrincipal
                 : monthlyPayment.subtract(plannedInterest).max(BigDecimal.ZERO);
 
@@ -498,6 +509,7 @@ public class MyLoanManagementService {
             }
 
             remainingPrincipal = remainingPrincipal.subtract(plannedPrincipal).max(BigDecimal.ZERO);
+            remainingUntouchedSchedules--;
         }
 
         if (changed) {
@@ -526,6 +538,11 @@ public class MyLoanManagementService {
         return application.getLoanProduct() != null
             && CONSUMPTION_ANALYSIS_TYPE.equals(application.getLoanProduct().getLoanProductType())
             && EQUAL_INSTALLMENT_TYPE.equals(application.getLoanProduct().getRepaymentType());
+    }
+
+    private boolean hasRecordedPayment(RepaymentSchedule schedule) {
+        return nullSafe(schedule.getPaidPrincipal()).compareTo(BigDecimal.ZERO) > 0
+            || nullSafe(schedule.getPaidInterest()).compareTo(BigDecimal.ZERO) > 0;
     }
 
     private Integer resolveOverdueDays(RepaymentSchedule schedule) {

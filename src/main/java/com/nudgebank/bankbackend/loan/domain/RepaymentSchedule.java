@@ -105,6 +105,19 @@ public class RepaymentSchedule {
         this.paidInterest = nullSafe(this.paidInterest).add(amount);
     }
 
+    public boolean normalizePaidAmounts() {
+        BigDecimal currentPlannedInterest = nullSafe(plannedInterest);
+        BigDecimal currentPaidInterest = nullSafe(paidInterest);
+        if (currentPaidInterest.compareTo(currentPlannedInterest) <= 0) {
+            return false;
+        }
+
+        BigDecimal excessInterest = currentPaidInterest.subtract(currentPlannedInterest);
+        this.paidInterest = currentPlannedInterest;
+        this.paidPrincipal = nullSafe(this.paidPrincipal).add(excessInterest);
+        return true;
+    }
+
     public void markSettled() {
         this.isSettled = true;
         this.overdueDays = 0;
