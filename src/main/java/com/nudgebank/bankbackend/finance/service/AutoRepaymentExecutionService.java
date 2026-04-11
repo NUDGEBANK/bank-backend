@@ -254,17 +254,14 @@ public class AutoRepaymentExecutionService {
 
     private ResolvedConsumptionLoan resolveConsumptionAnalysisLoan(Long memberId, CardTransaction transaction) {
         Loan loan = loanRepository
-                .findTopByMember_MemberIdAndLoanApplication_LoanProduct_LoanProductTypeOrderByStartDateDescIdDesc(
+                .findTopByMember_MemberIdAndLoanApplication_Card_CardIdAndLoanApplication_LoanProduct_LoanProductTypeOrderByStartDateDescIdDesc(
                         memberId,
+                        transaction.getCard().getCardId(),
                         CONSUMPTION_ANALYSIS_TYPE
                 )
                 .orElse(null);
 
         if (loan == null || loan.getLoanApplication() == null || loan.getLoanApplication().getCard() == null) {
-            return null;
-        }
-
-        if (!loan.getLoanApplication().getCard().getCardId().equals(transaction.getCard().getCardId())) {
             return null;
         }
 

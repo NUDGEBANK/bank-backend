@@ -18,6 +18,12 @@ public interface LoanRepository extends JpaRepository<Loan, Long> {
         String loanProductType
     );
 
+    Optional<Loan> findTopByMember_MemberIdAndLoanApplication_Card_CardIdAndLoanApplication_LoanProduct_LoanProductTypeOrderByStartDateDescIdDesc(
+        Long memberId,
+        Long cardId,
+        String loanProductType
+    );
+
     @Query("""
         select distinct l.member.memberId
         from Loan l
