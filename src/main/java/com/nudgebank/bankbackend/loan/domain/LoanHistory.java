@@ -102,6 +102,11 @@ public class LoanHistory {
         return appliedAmount;
     }
 
+    public void synchronizeRemainingPrincipal(BigDecimal remainingPrincipal) {
+        BigDecimal nextRemainingPrincipal = remainingPrincipal != null ? remainingPrincipal : BigDecimal.ZERO;
+        this.remainingPrincipal = nextRemainingPrincipal.max(BigDecimal.ZERO);
+    }
+
     public void syncRepaymentStatus(LocalDate nextRepaymentDate, boolean overdue) {
         this.expectedRepaymentDate = nextRepaymentDate;
 

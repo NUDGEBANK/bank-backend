@@ -81,6 +81,7 @@ public class MyLoanManagementService {
             baseInterestRate,
             currentInterestRate
         );
+        LocalDate displayEndDate = resolveDisplayEndDate(loanApplication, loanHistory, schedules);
 
         return new MyLoanSummaryResponse(
             loanHistory.getId(),
@@ -94,7 +95,7 @@ public class MyLoanManagementService {
             currentInterestRate,
             loanApplication.getLoanProduct().getRepaymentType(),
             loanHistory.getStartDate(),
-            loanHistory.getEndDate(),
+            displayEndDate,
             nextSchedule != null ? nextSchedule.getDueDate() : loanHistory.getExpectedRepaymentDate(),
             nextSchedule != null ? nullSafe(nextSchedule.getPlannedPrincipal()) : BigDecimal.ZERO,
             nextSchedule != null ? nullSafe(nextSchedule.getPlannedInterest()) : BigDecimal.ZERO,
@@ -502,6 +503,23 @@ public class MyLoanManagementService {
         if (changed) {
             repaymentScheduleRepository.saveAll(schedules);
         }
+    }
+
+    private LocalDate resolveDisplayEndDate(
+        LoanApplication application,
+        LoanHistory loanHistory,
+        List<RepaymentSchedule> schedules
+    ) {
+        if (!isConsumptionEqualInstallment(application)) {
+            return loanHistory.getEndDate();
+        }
+
+        return schedules.stream()
+            .filter(schedule -> !Boolean.TRUE.equals(schedule.getIsSettled()))
+            .map(RepaymentSchedule::getDueDate)
+            .filter(java.util.Objects::nonNull)
+            .reduce((first, second) -> second)
+            .orElse(loanHistory.getEndDate());
     }
 
     private boolean isConsumptionEqualInstallment(LoanApplication application) {

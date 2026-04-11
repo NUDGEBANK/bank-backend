@@ -247,10 +247,20 @@ public class LoanRepaymentService {
             BigDecimal interestDue = unpaidInterest.add(overdueInterest);
             BigDecimal interestPayment = remainingAmount.min(interestDue);
             if (interestPayment.compareTo(BigDecimal.ZERO) > 0) {
-                schedule.addPaidInterest(interestPayment);
-                paidInterest = paidInterest.add(interestPayment);
-                BigDecimal overdueInterestPayment = interestPayment.min(overdueInterest);
-                paidOverdueInterest = paidOverdueInterest.add(overdueInterestPayment);
+                if (isConsumptionAnalysisLoan(loan)) {
+                    BigDecimal plannedInterestPayment = interestPayment.min(unpaidInterest);
+                    if (plannedInterestPayment.compareTo(BigDecimal.ZERO) > 0) {
+                        schedule.addPaidInterest(plannedInterestPayment);
+                        paidInterest = paidInterest.add(plannedInterestPayment);
+                    }
+                    BigDecimal overdueInterestPayment = interestPayment.subtract(plannedInterestPayment).max(BigDecimal.ZERO);
+                    paidOverdueInterest = paidOverdueInterest.add(overdueInterestPayment);
+                } else {
+                    schedule.addPaidInterest(interestPayment);
+                    paidInterest = paidInterest.add(interestPayment);
+                    BigDecimal overdueInterestPayment = interestPayment.min(overdueInterest);
+                    paidOverdueInterest = paidOverdueInterest.add(overdueInterestPayment);
+                }
                 remainingAmount = remainingAmount.subtract(interestPayment);
             }
 
@@ -271,7 +281,9 @@ public class LoanRepaymentService {
         }
 
         repaymentScheduleRepository.saveAll(schedules);
-        if (paidPrincipal.compareTo(BigDecimal.ZERO) > 0) {
+        if (isConsumptionAnalysisLoan(loan)) {
+            loanHistory.synchronizeRemainingPrincipal(sumRemainingPrincipal(schedules));
+        } else if (paidPrincipal.compareTo(BigDecimal.ZERO) > 0) {
             loanHistory.applyRepayment(paidPrincipal);
         }
 
@@ -291,13 +303,6 @@ public class LoanRepaymentService {
             .filter(schedule -> !Boolean.TRUE.equals(schedule.getIsSettled()))
             .findFirst()
             .orElse(null);
-        LocalDate expectedCompletionDate = allSchedules.stream()
-            .filter(schedule -> !Boolean.TRUE.equals(schedule.getIsSettled()))
-            .map(RepaymentSchedule::getDueDate)
-            .filter(java.util.Objects::nonNull)
-            .reduce((first, second) -> second)
-            .orElse(loanHistory.getEndDate());
-
         boolean hasOverdue = allSchedules.stream()
             .anyMatch(schedule -> !Boolean.TRUE.equals(schedule.getIsSettled()) && calculateOverdueDays(schedule) > 0);
 
@@ -313,11 +318,8 @@ public class LoanRepaymentService {
             && loan.getLoanApplication() != null
             && loan.getLoanApplication().getLoanProduct() != null
             && CONSUMPTION_ANALYSIS_TYPE.equals(loan.getLoanApplication().getLoanProduct().getLoanProductType())) {
-            loanHistory.syncRepaymentStatus(
-                nextSchedule != null ? nextSchedule.getDueDate() : null,
-                expectedCompletionDate,
-                hasOverdue
-            );
+            loanHistory.synchronizeRemainingPrincipal(sumRemainingPrincipal(allSchedules));
+            loanHistory.syncRepaymentStatus(nextSchedule != null ? nextSchedule.getDueDate() : null, hasOverdue);
             return;
         }
 
@@ -477,6 +479,21 @@ public class LoanRepaymentService {
         BigDecimal denominator = factor.subtract(BigDecimal.ONE);
 
         return numerator.divide(denominator, 2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal sumRemainingPrincipal(List<RepaymentSchedule> schedules) {
+        return schedules.stream()
+            .map(RepaymentSchedule::getRemainingPlannedPrincipal)
+            .map(this::nullSafe)
+            .reduce(ZERO, BigDecimal::add)
+            .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private boolean isConsumptionAnalysisLoan(Loan loan) {
+        return loan != null
+            && loan.getLoanApplication() != null
+            && loan.getLoanApplication().getLoanProduct() != null
+            && CONSUMPTION_ANALYSIS_TYPE.equals(loan.getLoanApplication().getLoanProduct().getLoanProductType());
     }
 
     private String resolveManualRepaymentMenuName(Loan loan) {

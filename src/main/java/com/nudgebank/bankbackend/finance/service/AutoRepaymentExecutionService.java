@@ -158,6 +158,7 @@ public class AutoRepaymentExecutionService {
         BigDecimal remainingAmount = requestedAmount;
         BigDecimal paidPrincipal = ZERO;
         BigDecimal paidInterest = ZERO;
+        BigDecimal paidOverdueInterest = ZERO;
 
         for (RepaymentSchedule schedule : schedules) {
             if (remainingAmount.compareTo(BigDecimal.ZERO) <= 0) {
@@ -172,8 +173,13 @@ public class AutoRepaymentExecutionService {
             BigDecimal interestDue = schedule.getRemainingPlannedInterest().add(overdueInterest);
             BigDecimal interestPayment = remainingAmount.min(interestDue);
             if (interestPayment.compareTo(BigDecimal.ZERO) > 0) {
-                schedule.addPaidInterest(interestPayment);
-                paidInterest = paidInterest.add(interestPayment);
+                BigDecimal plannedInterestPayment = interestPayment.min(schedule.getRemainingPlannedInterest());
+                BigDecimal overdueInterestPayment = interestPayment.subtract(plannedInterestPayment).max(BigDecimal.ZERO);
+                if (plannedInterestPayment.compareTo(BigDecimal.ZERO) > 0) {
+                    schedule.addPaidInterest(plannedInterestPayment);
+                    paidInterest = paidInterest.add(plannedInterestPayment);
+                }
+                paidOverdueInterest = paidOverdueInterest.add(overdueInterestPayment);
                 remainingAmount = remainingAmount.subtract(interestPayment);
             }
 
@@ -193,11 +199,14 @@ public class AutoRepaymentExecutionService {
         }
 
         repaymentScheduleRepository.saveAll(schedules);
-        if (paidPrincipal.compareTo(BigDecimal.ZERO) > 0) {
-            loanHistory.applyRepayment(paidPrincipal);
-        }
+        loanHistory.synchronizeRemainingPrincipal(sumRemainingPrincipal(schedules));
 
-        return new AppliedRepayment(paidPrincipal.add(paidInterest), paidPrincipal, paidInterest);
+        return new AppliedRepayment(
+                paidPrincipal.add(paidInterest).add(paidOverdueInterest),
+                paidPrincipal,
+                paidInterest,
+                paidOverdueInterest
+        );
     }
 
     private void syncLoanHistory(LoanHistory loanHistory, List<RepaymentSchedule> schedules) {
@@ -206,24 +215,14 @@ public class AutoRepaymentExecutionService {
                 .findFirst()
                 .orElse(null);
 
-        LocalDate expectedCompletionDate = schedules.stream()
-                .filter(schedule -> !Boolean.TRUE.equals(schedule.getIsSettled()))
-                .map(RepaymentSchedule::getDueDate)
-                .filter(java.util.Objects::nonNull)
-                .reduce((first, second) -> second)
-                .orElse(loanHistory.getEndDate());
-
         boolean hasOverdue = schedules.stream()
                 .filter(schedule -> !Boolean.TRUE.equals(schedule.getIsSettled()))
                 .peek(schedule -> schedule.markPending(calculateOverdueDays(schedule)))
                 .anyMatch(schedule -> (schedule.getOverdueDays() != null ? schedule.getOverdueDays() : 0) > 0);
 
         repaymentScheduleRepository.saveAll(schedules);
-        loanHistory.syncRepaymentStatus(
-                nextSchedule != null ? nextSchedule.getDueDate() : null,
-                expectedCompletionDate,
-                hasOverdue
-        );
+        loanHistory.synchronizeRemainingPrincipal(sumRemainingPrincipal(schedules));
+        loanHistory.syncRepaymentStatus(nextSchedule != null ? nextSchedule.getDueDate() : null, hasOverdue);
     }
 
     private int calculateOverdueDays(RepaymentSchedule schedule) {
@@ -369,6 +368,14 @@ public class AutoRepaymentExecutionService {
         return numerator.divide(denominator, 2, RoundingMode.HALF_UP);
     }
 
+    private BigDecimal sumRemainingPrincipal(List<RepaymentSchedule> schedules) {
+        return schedules.stream()
+                .map(RepaymentSchedule::getRemainingPlannedPrincipal)
+                .map(this::nullSafe)
+                .reduce(ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+    }
+
     private record ResolvedConsumptionLoan(
             Loan loan,
             LoanHistory loanHistory
@@ -377,7 +384,8 @@ public class AutoRepaymentExecutionService {
     private record AppliedRepayment(
             BigDecimal totalPaid,
             BigDecimal principalPaid,
-            BigDecimal interestPaid
+            BigDecimal interestPaid,
+            BigDecimal overdueInterestPaid
     ) {}
 
     public record AutoRepaymentExecutionResult(
