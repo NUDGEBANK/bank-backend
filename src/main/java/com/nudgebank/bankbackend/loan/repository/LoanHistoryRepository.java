@@ -10,6 +10,11 @@ public interface LoanHistoryRepository extends JpaRepository<LoanHistory, Long> 
 
     List<LoanHistory> findAllByCard_CardIdAndStatusOrderByExpectedRepaymentDateAscCreatedAtDesc(Long cardId, String status);
 
+    List<LoanHistory> findAllByCard_CardIdAndStatusInOrderByExpectedRepaymentDateAscCreatedAtDesc(
+        Long cardId,
+        List<String> statuses
+    );
+
     Optional<LoanHistory> findTopByCard_CardIdAndStatusOrderByCreatedAtDesc(Long cardId, String status);
 
     Optional<LoanHistory> findTopByMember_MemberIdOrderByCreatedAtDesc(Long memberId);

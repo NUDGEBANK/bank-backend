@@ -28,6 +28,7 @@ import java.time.temporal.ChronoUnit;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class FinancialStatusService {
+    private static final List<String> OPEN_LOAN_STATUSES = List.of("ACTIVE", "OVERDUE");
 
     private final MemberRepository memberRepository;
     private final AccountRepository accountRepository;
@@ -56,10 +57,13 @@ public class FinancialStatusService {
         BigDecimal protectedBalance = nullSafe(account.getProtectedBalance());
         BigDecimal availableBalance = calculateAvailableBalance(linkedAccountBalance, protectedBalance);
 
-        List<LoanHistory> activeLoanHistories = loanHistoryRepository
-                .findAllByCard_CardIdAndStatusOrderByExpectedRepaymentDateAscCreatedAtDesc(card.getCardId(), "ACTIVE");
+        List<LoanHistory> openLoanHistories = loanHistoryRepository
+                .findAllByCard_CardIdAndStatusInOrderByExpectedRepaymentDateAscCreatedAtDesc(
+                        card.getCardId(),
+                        OPEN_LOAN_STATUSES
+                );
 
-        BigDecimal totalLoanRemainingPrincipal = activeLoanHistories.stream()
+        BigDecimal totalLoanRemainingPrincipal = openLoanHistories.stream()
                 .map(LoanHistory::getRemainingPrincipal)
                 .map(this::nullSafe)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -76,7 +80,7 @@ public class FinancialStatusService {
                 ? latestLoanApplication.getSalaryDate()
                 : null;
 
-        Integer daysUntilPaymentDue = calculateDaysUntilPaymentDue(resolveNearestDueLoan(activeLoanHistories));
+        Integer daysUntilPaymentDue = calculateDaysUntilPaymentDue(resolveNearestDueLoan(openLoanHistories));
 
         BigDecimal currentMonthSpendingAmount = nullSafe(
                 cardTransactionRepository.sumCurrentMonthSpendingAmountUntilTransaction(
@@ -146,8 +150,8 @@ public class FinancialStatusService {
         return Math.max(days, 0);
     }
 
-    private LoanHistory resolveNearestDueLoan(List<LoanHistory> activeLoanHistories) {
-        return activeLoanHistories.stream()
+    private LoanHistory resolveNearestDueLoan(List<LoanHistory> openLoanHistories) {
+        return openLoanHistories.stream()
                 .filter(loanHistory -> loanHistory.getExpectedRepaymentDate() != null)
                 .min(Comparator.comparing(LoanHistory::getExpectedRepaymentDate)
                         .thenComparing(LoanHistory::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
