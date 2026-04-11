@@ -56,6 +56,9 @@ public class LoanApplication {
     @Column(name = "monthly_income", precision = 15, scale = 2)
     private BigDecimal monthlyIncome;
 
+    @Column(name = "protected_balance", precision = 15, scale = 2)
+    private BigDecimal protectedBalance;
+
     @Column(name = "salary_date")
     private Integer salaryDate;
 }
