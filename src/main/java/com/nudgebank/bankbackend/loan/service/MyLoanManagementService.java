@@ -165,7 +165,7 @@ public class MyLoanManagementService {
 
         return new MyLoanSummaryResponse(
             null,
-            application.getApplicationStatus(),
+            application.getApplicationStatus().name(),
             totalPrincipal,
             totalPrincipal,
             BigDecimal.ZERO,
