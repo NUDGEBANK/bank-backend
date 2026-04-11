@@ -26,4 +26,5 @@ public class LoanProductController {
     public LoanProductDetailResponse getLoanProductDetail(@PathVariable Long loanProductId) {
         return loanProductService.getLoanProductDetail(loanProductId);
     }
+
 }

@@ -44,8 +44,9 @@ public class LoanApplication {
     @Column(name = "loan_term", length = 100)
     private String loanTerm;
 
-    @Column(name = "application_status", length = 100)
-    private String applicationStatus;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "application_status", length = 100, nullable = false)
+    private LoanApplicationStatus applicationStatus;
 
     @Column(name = "applied_at")
     private LocalDateTime appliedAt;
@@ -61,4 +62,22 @@ public class LoanApplication {
 
     @Column(name = "salary_date")
     private Integer salaryDate;
+
+    public boolean isPendingReview() {
+        return this.applicationStatus == LoanApplicationStatus.PENDING;
+    }
+
+    public void approve() {
+        if (!isPendingReview()) {
+            throw new IllegalStateException("심사 대기 상태가 아닙니다. currentStatus=" + this.applicationStatus);
+        }
+        this.applicationStatus = LoanApplicationStatus.APPROVED;
+    }
+
+    public void reject(Long reviewerId) {
+        if (!isPendingReview()) {
+            throw new IllegalStateException("심사 대기 상태가 아닙니다. currentStatus=" + this.applicationStatus);
+        }
+        this.applicationStatus = LoanApplicationStatus.REJECTED;
+    }
 }

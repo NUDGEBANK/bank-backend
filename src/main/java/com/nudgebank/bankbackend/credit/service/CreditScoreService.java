@@ -118,6 +118,7 @@ public class CreditScoreService {
     return !elapsed.isNegative() && elapsed.compareTo(EVALUATION_COOLDOWN) < 0;
   }
 
+  // evaluateAndSave: credit_history 데이터 저장
   private CreditHistory evaluateAndSave(Long memberId) {
     List<Account> accounts = accountRepository.findAllByMemberId(memberId);
     List<Card> cards = accounts.stream()
