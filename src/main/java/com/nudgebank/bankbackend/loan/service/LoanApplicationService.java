@@ -416,7 +416,15 @@ public class LoanApplicationService {
             throw new IllegalArgumentException("보호잔액은 신청 금액보다 클 수 없습니다.");
         }
 
-        return protectedBalance;
+        return normalizeProtectedBalanceScale(protectedBalance);
+    }
+
+    private BigDecimal normalizeProtectedBalanceScale(BigDecimal protectedBalance) {
+        try {
+            return protectedBalance.setScale(2, RoundingMode.UNNECESSARY);
+        } catch (ArithmeticException exception) {
+            throw new IllegalArgumentException("보호잔액은 소수점 둘째 자리까지만 입력할 수 있습니다.");
+        }
     }
 
     private BigDecimal resolveProtectedBalanceForExecution(LoanApplication loanApplication, Account repaymentAccount) {
