@@ -76,6 +76,11 @@ public class RepaymentSchedule {
         this.plannedInterest = plannedInterest;
     }
 
+    public void updatePlannedAmounts(BigDecimal plannedPrincipal, BigDecimal plannedInterest) {
+        this.plannedPrincipal = plannedPrincipal;
+        this.plannedInterest = plannedInterest;
+    }
+
     public BigDecimal getRemainingPlannedPrincipal() {
         return nullSafe(plannedPrincipal).subtract(nullSafe(paidPrincipal)).max(BigDecimal.ZERO);
     }

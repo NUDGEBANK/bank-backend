@@ -32,6 +32,7 @@ public class MyLoanManagementService {
     private static final String CONSUMPTION_ANALYSIS_TYPE = "CONSUMPTION_ANALYSIS";
     private static final String EMERGENCY_TYPE = "EMERGENCY";
     private static final String MATURITY_LUMP_SUM_TYPE = "MATURITY_LUMP_SUM";
+    private static final String EQUAL_INSTALLMENT_TYPE = "EQUAL_INSTALLMENT";
 
     private final LoanApplicationRepository loanApplicationRepository;
     private final LoanHistoryRepository loanHistoryRepository;
@@ -41,6 +42,7 @@ public class MyLoanManagementService {
     private final CertificateSubmissionRepository certificateSubmissionRepository;
     private final CertificateMasterRepository certificateMasterRepository;
 
+    @Transactional
     public MyLoanSummaryResponse getSummary(Long memberId, String productKey) {
         LoanHistory loanHistory = resolveLoanHistory(memberId, productKey).orElse(null);
         if (loanHistory == null) {
@@ -50,6 +52,9 @@ public class MyLoanManagementService {
         Loan loan = resolveLoan(memberId, productKey).orElse(null);
         List<RepaymentSchedule> schedules =
             repaymentScheduleRepository.findAllByLoanHistory_IdOrderByDueDateAsc(loanHistory.getId());
+        if (loan != null) {
+            refreshEqualInstallmentSchedulesIfNeeded(loanHistory, loan, schedules);
+        }
 
         RepaymentSchedule nextSchedule = schedules.stream()
             .filter(schedule -> !Boolean.TRUE.equals(schedule.getIsSettled()))
@@ -102,6 +107,7 @@ public class MyLoanManagementService {
         );
     }
 
+    @Transactional
     public List<MyLoanRepaymentScheduleResponse> getRepaymentSchedules(Long memberId, String productKey) {
         LoanHistory loanHistory = resolveLoanHistory(memberId, productKey).orElse(null);
         if (loanHistory == null) {
@@ -109,7 +115,13 @@ public class MyLoanManagementService {
             return List.of();
         }
 
-        return repaymentScheduleRepository.findAllByLoanHistory_IdOrderByDueDateAsc(loanHistory.getId()).stream()
+        Loan loan = resolveLoan(memberId, productKey).orElse(null);
+        List<RepaymentSchedule> schedules = repaymentScheduleRepository.findAllByLoanHistory_IdOrderByDueDateAsc(loanHistory.getId());
+        if (loan != null) {
+            refreshEqualInstallmentSchedulesIfNeeded(loanHistory, loan, schedules);
+        }
+
+        return schedules.stream()
             .map(schedule -> new MyLoanRepaymentScheduleResponse(
                 schedule.getScheduleId(),
                 schedule.getDueDate(),
@@ -149,10 +161,7 @@ public class MyLoanManagementService {
         BigDecimal baseInterestRate = resolveBaseInterestRate(application);
         BigDecimal minimumInterestRate = resolveMinimumInterestRate(application);
         BigDecimal preferentialRateDiscount = resolvePreferentialRateDiscount(application.getId(), baseInterestRate, interestRate);
-        int repaymentMonths = application.getLoanProduct().getRepaymentPeriodMonth() != null
-            && application.getLoanProduct().getRepaymentPeriodMonth() > 0
-            ? application.getLoanProduct().getRepaymentPeriodMonth()
-            : 1;
+        int repaymentMonths = resolveRepaymentMonths(application);
         LocalDate startDate = application.getAppliedAt() != null
             ? application.getAppliedAt().toLocalDate()
             : LocalDate.now();
@@ -177,13 +186,30 @@ public class MyLoanManagementService {
             startDate,
             startDate.plusMonths(repaymentMonths),
             startDate.plusMonths(1),
-            resolvePendingNextPaymentPrincipal(application, totalPrincipal, repaymentMonths),
+            resolvePendingNextPaymentPrincipal(application, totalPrincipal, interestRate, repaymentMonths),
             resolvePendingNextPaymentInterest(application, totalPrincipal, interestRate),
             nextPaymentAmount,
             BigDecimal.ZERO,
             resolvePendingRemainingInterestAmount(application, totalPrincipal, interestRate, repaymentMonths),
             null
         );
+    }
+
+    private int resolveRepaymentMonths(LoanApplication application) {
+        String loanTerm = application.getLoanTerm();
+        if (loanTerm != null) {
+            String digits = loanTerm.replaceAll("[^0-9]", "");
+            if (!digits.isBlank()) {
+                return Integer.parseInt(digits);
+            }
+        }
+
+        Integer repaymentPeriodMonth = application.getLoanProduct().getRepaymentPeriodMonth();
+        if (repaymentPeriodMonth != null && repaymentPeriodMonth > 0) {
+            return repaymentPeriodMonth;
+        }
+
+        return 1;
     }
 
     private LoanApplication ensureDisplayableLoanExists(Long memberId, String productKey) {
@@ -218,6 +244,17 @@ public class MyLoanManagementService {
     private java.util.Optional<LoanHistory> resolveLoanHistory(Long memberId, String productKey) {
         Loan loan = resolveLoan(memberId, productKey).orElse(null);
         if (loan != null && loan.getLoanApplication() != null && loan.getLoanApplication().getCard() != null) {
+            java.util.Optional<LoanHistory> matchedLoanHistory = loanHistoryRepository
+                .findTopByMember_MemberIdAndCard_CardIdAndTotalPrincipalAndStartDateOrderByCreatedAtDesc(
+                    memberId,
+                    loan.getLoanApplication().getCard().getCardId(),
+                    nullSafe(loan.getPrincipalAmount()),
+                    loan.getStartDate()
+                );
+            if (matchedLoanHistory.isPresent()) {
+                return matchedLoanHistory;
+            }
+
             return loanHistoryRepository
                 .findTopByMember_MemberIdAndCard_CardIdAndTotalPrincipalAndStartDateAndEndDateOrderByCreatedAtDesc(
                     memberId,
@@ -284,17 +321,24 @@ public class MyLoanManagementService {
         BigDecimal interestRate,
         int repaymentMonths
     ) {
-        return resolvePendingNextPaymentPrincipal(application, totalPrincipal, repaymentMonths)
+        return resolvePendingNextPaymentPrincipal(application, totalPrincipal, interestRate, repaymentMonths)
             .add(resolvePendingNextPaymentInterest(application, totalPrincipal, interestRate));
     }
 
     private BigDecimal resolvePendingNextPaymentPrincipal(
         LoanApplication application,
         BigDecimal totalPrincipal,
+        BigDecimal interestRate,
         int repaymentMonths
     ) {
-        if (MATURITY_LUMP_SUM_TYPE.equals(application.getLoanProduct().getRepaymentType())) {
+        String repaymentType = application.getLoanProduct().getRepaymentType();
+        if (MATURITY_LUMP_SUM_TYPE.equals(repaymentType)) {
             return BigDecimal.ZERO;
+        }
+        if (isConsumptionEqualInstallment(application)) {
+            return calculateEqualInstallmentAmount(totalPrincipal, interestRate, repaymentMonths)
+                .subtract(resolvePendingNextPaymentInterest(application, totalPrincipal, interestRate))
+                .max(BigDecimal.ZERO);
         }
 
         return repaymentMonths > 0
@@ -327,6 +371,9 @@ public class MyLoanManagementService {
             return resolvePendingNextPaymentInterest(application, totalPrincipal, interestRate)
                 .multiply(BigDecimal.valueOf(repaymentMonths));
         }
+        if (isConsumptionEqualInstallment(application)) {
+            return calculateEqualInstallmentTotalInterest(totalPrincipal, interestRate, repaymentMonths);
+        }
 
         BigDecimal remainingPrincipal = totalPrincipal;
         BigDecimal monthlyPrincipal = repaymentMonths > 0
@@ -347,6 +394,120 @@ public class MyLoanManagementService {
         }
 
         return remainingInterest;
+    }
+
+    private BigDecimal calculateEqualInstallmentAmount(
+        BigDecimal principalAmount,
+        BigDecimal annualInterestRate,
+        int repaymentMonths
+    ) {
+        if (repaymentMonths <= 0) {
+            return principalAmount;
+        }
+        if (principalAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO;
+        }
+
+        BigDecimal monthlyRate = annualInterestRate
+            .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
+            .divide(BigDecimal.valueOf(12), 10, RoundingMode.HALF_UP);
+
+        if (monthlyRate.compareTo(BigDecimal.ZERO) == 0) {
+            return principalAmount.divide(BigDecimal.valueOf(repaymentMonths), 2, RoundingMode.HALF_UP);
+        }
+
+        BigDecimal factor = BigDecimal.ONE.add(monthlyRate).pow(repaymentMonths);
+        BigDecimal numerator = principalAmount.multiply(monthlyRate).multiply(factor);
+        BigDecimal denominator = factor.subtract(BigDecimal.ONE);
+
+        return numerator.divide(denominator, 2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculateEqualInstallmentTotalInterest(
+        BigDecimal principalAmount,
+        BigDecimal annualInterestRate,
+        int repaymentMonths
+    ) {
+        if (repaymentMonths <= 0 || principalAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO;
+        }
+
+        BigDecimal monthlyPayment = calculateEqualInstallmentAmount(principalAmount, annualInterestRate, repaymentMonths);
+        BigDecimal remainingPrincipal = principalAmount;
+        BigDecimal totalInterest = BigDecimal.ZERO;
+        BigDecimal allocatedPrincipal = BigDecimal.ZERO;
+
+        for (int month = 1; month <= repaymentMonths; month++) {
+            BigDecimal plannedInterest = remainingPrincipal
+                .multiply(annualInterestRate)
+                .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
+                .divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
+            BigDecimal plannedPrincipal = month == repaymentMonths
+                ? principalAmount.subtract(allocatedPrincipal)
+                : monthlyPayment.subtract(plannedInterest).max(BigDecimal.ZERO);
+
+            totalInterest = totalInterest.add(plannedInterest);
+            allocatedPrincipal = allocatedPrincipal.add(plannedPrincipal);
+            remainingPrincipal = remainingPrincipal.subtract(plannedPrincipal).max(BigDecimal.ZERO);
+        }
+
+        return totalInterest;
+    }
+
+    private void refreshEqualInstallmentSchedulesIfNeeded(
+        LoanHistory loanHistory,
+        Loan loan,
+        List<RepaymentSchedule> schedules
+    ) {
+        if (loan.getLoanApplication() == null
+            || loan.getLoanApplication().getLoanProduct() == null
+            || !CONSUMPTION_ANALYSIS_TYPE.equals(loan.getLoanApplication().getLoanProduct().getLoanProductType())
+            || !EQUAL_INSTALLMENT_TYPE.equals(loan.getLoanApplication().getLoanProduct().getRepaymentType())
+            || schedules.isEmpty()) {
+            return;
+        }
+
+        List<RepaymentSchedule> unsettledSchedules = schedules.stream()
+            .filter(schedule -> !Boolean.TRUE.equals(schedule.getIsSettled()))
+            .toList();
+        if (unsettledSchedules.isEmpty()) {
+            return;
+        }
+
+        BigDecimal totalPrincipal = nullSafe(loanHistory.getTotalPrincipal());
+        BigDecimal annualInterestRate = nullSafe(loan.getInterestRate());
+        BigDecimal monthlyPayment = calculateEqualInstallmentAmount(totalPrincipal, annualInterestRate, schedules.size());
+        BigDecimal remainingPrincipal = nullSafe(loanHistory.getRemainingPrincipal());
+        boolean changed = false;
+
+        for (int index = 0; index < unsettledSchedules.size(); index++) {
+            RepaymentSchedule schedule = unsettledSchedules.get(index);
+            BigDecimal plannedInterest = remainingPrincipal
+                .multiply(annualInterestRate)
+                .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
+                .divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
+            BigDecimal plannedPrincipal = index == unsettledSchedules.size() - 1
+                ? remainingPrincipal
+                : monthlyPayment.subtract(plannedInterest).max(BigDecimal.ZERO);
+
+            if (nullSafe(schedule.getPlannedPrincipal()).compareTo(plannedPrincipal) != 0
+                || nullSafe(schedule.getPlannedInterest()).compareTo(plannedInterest) != 0) {
+                schedule.updatePlannedAmounts(plannedPrincipal, plannedInterest);
+                changed = true;
+            }
+
+            remainingPrincipal = remainingPrincipal.subtract(plannedPrincipal).max(BigDecimal.ZERO);
+        }
+
+        if (changed) {
+            repaymentScheduleRepository.saveAll(schedules);
+        }
+    }
+
+    private boolean isConsumptionEqualInstallment(LoanApplication application) {
+        return application.getLoanProduct() != null
+            && CONSUMPTION_ANALYSIS_TYPE.equals(application.getLoanProduct().getLoanProductType())
+            && EQUAL_INSTALLMENT_TYPE.equals(application.getLoanProduct().getRepaymentType());
     }
 
     private Integer resolveOverdueDays(RepaymentSchedule schedule) {
