@@ -2,7 +2,12 @@ package com.nudgebank.bankbackend.finance.service;
 
 import com.nudgebank.bankbackend.account.domain.Account;
 import com.nudgebank.bankbackend.account.repository.AccountRepository;
+import com.nudgebank.bankbackend.card.domain.Card;
 import com.nudgebank.bankbackend.card.domain.CardTransaction;
+import com.nudgebank.bankbackend.card.domain.Market;
+import com.nudgebank.bankbackend.card.repository.CardTransactionRepository;
+import com.nudgebank.bankbackend.card.repository.MarketCategoryRepository;
+import com.nudgebank.bankbackend.card.repository.MarketRepository;
 import com.nudgebank.bankbackend.finance.dto.AutoRepaymentDecisionResponse;
 import com.nudgebank.bankbackend.loan.domain.Loan;
 import com.nudgebank.bankbackend.loan.domain.LoanHistory;
@@ -12,7 +17,10 @@ import com.nudgebank.bankbackend.loan.repository.LoanHistoryRepository;
 import com.nudgebank.bankbackend.loan.repository.LoanRepaymentHistoryRepository;
 import com.nudgebank.bankbackend.loan.repository.LoanRepository;
 import com.nudgebank.bankbackend.loan.repository.RepaymentScheduleRepository;
+import com.nudgebank.bankbackend.loan.service.RepaymentService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +31,7 @@ import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AutoRepaymentExecutionService {
@@ -40,9 +49,75 @@ public class AutoRepaymentExecutionService {
     private final RepaymentScheduleRepository repaymentScheduleRepository;
     private final LoanRepaymentHistoryRepository loanRepaymentHistoryRepository;
     private final AccountRepository accountRepository;
+    private final CardTransactionRepository cardTransactionRepository;
+    private final RepaymentService repaymentService;
+    private final MarketRepository marketRepository;
+    private final MarketCategoryRepository marketCategoryRepository;
+
+    @Async
+    @Transactional
+    public void executeAfterPaymentReal(Long memberId, Long transactionId) {
+        CardTransaction transaction = cardTransactionRepository.findById(transactionId).orElse(null);
+        if (transaction == null) {
+            log.info("유효하지 않은 트랜잭션 id 입니다. : " + transactionId);
+            return;
+        }
+        ResolvedConsumptionLoan resolvedLoan = resolveConsumptionAnalysisLoan(memberId, transaction);
+        if (resolvedLoan == null) {
+            log.info("대출 내역이 없습니다. : " + memberId);
+            return;
+        }
+
+        AutoRepaymentDecisionResponse decision = autoRepaymentPolicyService.decideAutoRepayment(
+                memberId,
+                transaction.getTransactionId()
+        );
+
+        BigDecimal ratio = nullSafe(decision.getFinalRepaymentRatio());
+        if (ratio.compareTo(ZERO) <= 0) {
+            return;
+        }
+
+        Account account = accountRepository.findByIdForUpdate(transaction.getCard().getAccountId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "자동상환용 계좌를 찾을 수 없습니다. accountId=" + transaction.getCard().getAccountId()
+                ));
+
+        BigDecimal repaymentAmount = calculateRepaymentAmountReal(
+                transaction.getAmount(),
+                ratio,
+                account
+        );
+
+        log.info("자동 상환 금액 : " + repaymentAmount);
+
+        if (repaymentAmount.compareTo(ZERO) <= 0) {
+            return;
+        }
+
+        RepaymentService.RepaymentResult result = repaymentService.repay(resolvedLoan.loanHistory(), resolvedLoan.loan(), repaymentAmount);
+        if (result.totalPaid().compareTo(BigDecimal.ZERO) > 0) {
+            log.info("차감할게요 : " + result.totalPaid());
+            account.withdraw(result.totalPaid());
+            CardTransaction autoRepayTransaction = CardTransaction.builder()
+                    .card(transaction.getCard())
+                    .market(marketRepository.findById(26L).get())
+                    .category(marketCategoryRepository.findById(19L).get())
+                    .amount(repaymentAmount)
+                    .transactionDatetime(OffsetDateTime.now())
+                    .menuName("대출금 자동상환")
+                    .quantity(1)
+                    .build();
+            cardTransactionRepository.save(autoRepayTransaction);
+        }
+    }
 
     @Transactional
-    public AutoRepaymentExecutionResult executeAfterPayment(Long memberId, CardTransaction transaction) {
+    public AutoRepaymentExecutionResult executeAfterPayment(Long memberId, Long transactionId) {
+        CardTransaction transaction = cardTransactionRepository.findById(transactionId).orElse(null);
+        if (transaction == null) {
+            return null;
+        }
         ResolvedConsumptionLoan resolvedLoan = resolveConsumptionAnalysisLoan(memberId, transaction);
         if (resolvedLoan == null) {
             return AutoRepaymentExecutionResult.notApplied();
@@ -119,6 +194,19 @@ public class AutoRepaymentExecutionService {
                 nullSafe(resolvedLoan.loanHistory().getRemainingPrincipal()),
                 appliedRepayment.totalPaid().compareTo(BigDecimal.ZERO) > 0
         );
+    }
+
+    private BigDecimal calculateRepaymentAmountReal(
+            BigDecimal transactionAmount,
+            BigDecimal ratio,
+            Account account
+    ) {
+        BigDecimal requestedAmount = nullSafe(transactionAmount)
+                .multiply(ratio)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal availableBalance = nullSafe(account.getBalance()).subtract(nullSafe(account.getProtectedBalance()));
+        return requestedAmount.min(availableBalance).max(ZERO);
     }
 
     private BigDecimal calculateRepaymentAmount(
