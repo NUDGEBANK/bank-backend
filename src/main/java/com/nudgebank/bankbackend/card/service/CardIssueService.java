@@ -58,8 +58,7 @@ public class CardIssueService {
             request.accountName(),
             generateUniqueAccountNumber(),
             BigDecimal.ZERO.setScale(2),
-            now,
-            BigDecimal.ZERO.setScale(2)
+            now
         )
     );
 

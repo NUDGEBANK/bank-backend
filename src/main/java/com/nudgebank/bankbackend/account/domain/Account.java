@@ -5,7 +5,6 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 
 @Entity
@@ -33,17 +32,13 @@ public class Account {
   @Column(name = "opened_at", nullable = false)
   private OffsetDateTime openedAt;
 
-  @Column(name = "protected_balance", nullable = false, precision = 15, scale = 2)
-  private BigDecimal protectedBalance;
-
   private Account(
       Long accountId,
       Long memberId,
       String accountName,
       String accountNumber,
       BigDecimal balance,
-      OffsetDateTime openedAt,
-      BigDecimal protectedBalance
+      OffsetDateTime openedAt
   ) {
     this.accountId = accountId;
     this.memberId = memberId;
@@ -51,7 +46,6 @@ public class Account {
     this.accountNumber = accountNumber;
     this.balance = balance;
     this.openedAt = openedAt;
-    this.protectedBalance = protectedBalance;
   }
 
   public static Account create(
@@ -59,8 +53,7 @@ public class Account {
       String accountName,
       String accountNumber,
       BigDecimal balance,
-      OffsetDateTime openedAt,
-      BigDecimal protectedBalance
+      OffsetDateTime openedAt
   ) {
     return new Account(
         null,
@@ -68,8 +61,7 @@ public class Account {
         accountName,
         accountNumber,
         balance,
-        openedAt,
-        protectedBalance
+        openedAt
     );
   }
   public void withdraw(BigDecimal amount) {
@@ -81,11 +73,8 @@ public class Account {
       throw new IllegalStateException("계좌 잔액 정보가 없습니다.");
     }
 
-    BigDecimal availableBalance = this.balance.subtract(
-      this.protectedBalance != null ? this.protectedBalance : BigDecimal.ZERO
-    );
-    if (availableBalance.compareTo(amount) < 0) {
-      throw new IllegalStateException("사용 가능 잔액이 부족합니다.");
+    if (this.balance.compareTo(amount) < 0) {
+      throw new IllegalStateException("잔액이 부족합니다.");
     }
 
     this.balance = this.balance.subtract(amount);
@@ -101,33 +90,5 @@ public class Account {
     }
 
     this.balance = this.balance.add(amount);
-  }
-
-  public void updateProtectedBalance(BigDecimal protectedBalance) {
-    if (protectedBalance == null) {
-      throw new IllegalArgumentException("보호잔액은 필수입니다.");
-    }
-
-    if (protectedBalance.compareTo(BigDecimal.ZERO) < 0) {
-      throw new IllegalArgumentException("보호잔액은 0 이상이어야 합니다.");
-    }
-
-    if (this.balance == null) {
-      throw new IllegalStateException("계좌 잔액 정보가 없습니다.");
-    }
-
-    if (protectedBalance.compareTo(this.balance) > 0) {
-      throw new IllegalArgumentException("보호잔액은 계좌 잔액보다 클 수 없습니다.");
-    }
-
-    this.protectedBalance = normalizeProtectedBalanceScale(protectedBalance);
-  }
-
-  private BigDecimal normalizeProtectedBalanceScale(BigDecimal protectedBalance) {
-    try {
-      return protectedBalance.setScale(2, RoundingMode.UNNECESSARY);
-    } catch (ArithmeticException exception) {
-      throw new IllegalArgumentException("보호잔액은 소수점 둘째 자리까지만 입력할 수 있습니다.");
-    }
   }
 }

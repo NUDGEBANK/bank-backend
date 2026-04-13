@@ -15,7 +15,6 @@ public class FinancialStatusResponse {
 
     // 자산/현금흐름
     private BigDecimal linkedAccountBalance; //연동 계좌 잔액
-    private BigDecimal protectedBalance; //보호 잔액
     private BigDecimal availableBalance; //사용 가능한 잔액
     private BigDecimal monthlyIncome;    //월 소득
     private Integer salaryDate;          //급여일
