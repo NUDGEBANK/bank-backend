@@ -54,8 +54,7 @@ public class FinancialStatusService {
         validateTransactionOwnership(memberId, account);
 
         BigDecimal linkedAccountBalance = nullSafe(account.getBalance());
-        BigDecimal protectedBalance = nullSafe(account.getProtectedBalance());
-        BigDecimal availableBalance = calculateAvailableBalance(linkedAccountBalance, protectedBalance);
+        BigDecimal availableBalance = linkedAccountBalance;
 
         List<LoanHistory> openLoanHistories = loanHistoryRepository
                 .findAllByCard_CardIdAndStatusInOrderByExpectedRepaymentDateAscCreatedAtDesc(
@@ -100,7 +99,6 @@ public class FinancialStatusService {
                 .cardId(card.getCardId())
                 .accountId(account.getAccountId())
                 .linkedAccountBalance(linkedAccountBalance)
-                .protectedBalance(protectedBalance)
                 .availableBalance(availableBalance)
                 .monthlyIncome(monthlyIncome)
                 .salaryDate(salaryDate)
@@ -128,13 +126,6 @@ public class FinancialStatusService {
                     "해당 거래는 요청한 회원의 거래가 아닙니다. memberId=" + memberId
             );
         }
-    }
-
-    private BigDecimal calculateAvailableBalance(BigDecimal linkedAccountBalance, BigDecimal protectedBalance) {
-        BigDecimal availableBalance = linkedAccountBalance.subtract(protectedBalance);
-        return availableBalance.compareTo(BigDecimal.ZERO) < 0
-                ? BigDecimal.ZERO
-                : availableBalance;
     }
 
     private Integer calculateDaysUntilPaymentDue(LoanHistory nearestDueLoan) {

@@ -575,8 +575,7 @@ public class LoanRepaymentService {
     }
 
     private BigDecimal availableBalance(Account account) {
-        BigDecimal protectedBalance = account.getProtectedBalance() != null ? account.getProtectedBalance() : ZERO;
-        return nullSafe(account.getBalance()).subtract(protectedBalance);
+        return nullSafe(account.getBalance());
     }
 
     private MarketCategory resolveRepaymentCategory() {

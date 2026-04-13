@@ -14,6 +14,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "chat_messages")
@@ -36,6 +38,10 @@ public class ChatMessage {
 
     @Column(name = "message_content", columnDefinition = "TEXT")
     private String messageContent;
+
+    @JdbcTypeCode(SqlTypes.VECTOR)
+    @Column(name = "embedding", columnDefinition = "vector(768)")
+    private float[] embedding;
 
     @CreationTimestamp
     @Column(name = "created_at")
