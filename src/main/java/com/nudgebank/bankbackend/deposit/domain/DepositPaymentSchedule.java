@@ -98,12 +98,12 @@ public class DepositPaymentSchedule {
         this.paidAmount = paidAmount;
         this.paidAt = paidAt;
         this.isPaid = true;
-        this.autoTransferStatus = "COMPLETED";
+        this.autoTransferStatus = Boolean.TRUE.equals(this.autoTransferYn) ? "SUCCESS" : null;
     }
 
     public void cancel() {
-        if (!Boolean.TRUE.equals(this.isPaid)) {
-            this.autoTransferStatus = "CANCELLED";
+        if (Boolean.TRUE.equals(this.autoTransferYn) && !Boolean.TRUE.equals(this.isPaid)) {
+            this.autoTransferStatus = "STOPPED";
         }
     }
 }
