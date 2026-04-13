@@ -11,8 +11,6 @@ import java.util.List;
 import java.util.Optional;
 
 public interface DepositAccountRepository extends JpaRepository<DepositAccount, Long> {
-    boolean existsByDepositAccountNumber(String depositAccountNumber);
-
     List<DepositAccount> findAllByMemberIdOrderByStartDateDesc(Long memberId);
 
     Optional<DepositAccount> findByDepositAccountIdAndMemberId(Long depositAccountId, Long memberId);
