@@ -55,6 +55,7 @@ public class LoanApplicationService {
     private static final String LOAN_MARKET_NAME = "NudgeBank 대출 실행";
     private static final String LOAN_CATEGORY_MCC = "LOAN";
     private static final String MATURITY_LUMP_SUM_TYPE = "MATURITY_LUMP_SUM";
+    private static final String EQUAL_INSTALLMENT_TYPE = "EQUAL_INSTALLMENT";
 
     private final LoanApplicationRepository loanApplicationRepository;
     private final LoanProductRepository loanProductRepository;
@@ -324,7 +325,8 @@ public class LoanApplicationService {
                 interestRate,
                 startDate,
                 repaymentMonths,
-                loanApplication.getLoanProduct().getRepaymentType()
+                loanApplication.getLoanProduct().getRepaymentType(),
+                loanApplication.getLoanProduct().getLoanProductType()
             )
         );
 
@@ -388,28 +390,38 @@ public class LoanApplicationService {
         BigDecimal annualInterestRate,
         LocalDate startDate,
         int repaymentMonths,
-        String repaymentType
+        String repaymentType,
+        String loanProductType
     ) {
         List<RepaymentSchedule> schedules = new ArrayList<>();
         BigDecimal remainingPrincipal = principalAmount;
-        BigDecimal monthlyPrincipal = principalAmount
-            .divide(BigDecimal.valueOf(repaymentMonths), 2, RoundingMode.DOWN);
         BigDecimal allocatedPrincipal = BigDecimal.ZERO;
         boolean maturityLumpSum = MATURITY_LUMP_SUM_TYPE.equals(repaymentType);
+        boolean equalInstallment = EQUAL_INSTALLMENT_TYPE.equals(repaymentType)
+            && CONSUMPTION_ANALYSIS_TYPE.equals(loanProductType);
+        BigDecimal monthlyPayment = equalInstallment
+            ? calculateEqualInstallmentAmount(principalAmount, annualInterestRate, repaymentMonths)
+            : BigDecimal.ZERO;
 
         for (int month = 1; month <= repaymentMonths; month++) {
             BigDecimal plannedPrincipal;
-            if (maturityLumpSum) {
-                plannedPrincipal = month == repaymentMonths ? principalAmount : BigDecimal.ZERO;
-            } else {
-                plannedPrincipal = month == repaymentMonths
-                    ? principalAmount.subtract(allocatedPrincipal)
-                    : monthlyPrincipal;
-            }
             BigDecimal plannedInterest = remainingPrincipal
                 .multiply(annualInterestRate)
                 .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
                 .divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
+            if (maturityLumpSum) {
+                plannedPrincipal = month == repaymentMonths ? principalAmount : BigDecimal.ZERO;
+            } else if (equalInstallment) {
+                plannedPrincipal = month == repaymentMonths
+                    ? principalAmount.subtract(allocatedPrincipal)
+                    : monthlyPayment.subtract(plannedInterest).max(BigDecimal.ZERO);
+            } else {
+                BigDecimal monthlyPrincipal = principalAmount
+                    .divide(BigDecimal.valueOf(repaymentMonths), 2, RoundingMode.DOWN);
+                plannedPrincipal = month == repaymentMonths
+                    ? principalAmount.subtract(allocatedPrincipal)
+                    : monthlyPrincipal;
+            }
 
             schedules.add(
                 RepaymentSchedule.create(
@@ -427,18 +439,45 @@ public class LoanApplicationService {
         return schedules;
     }
 
-    private int resolveRepaymentMonths(LoanApplication loanApplication) {
-        Integer repaymentPeriodMonth = loanApplication.getLoanProduct().getRepaymentPeriodMonth();
-        if (repaymentPeriodMonth != null && repaymentPeriodMonth > 0) {
-            return repaymentPeriodMonth;
+    private BigDecimal calculateEqualInstallmentAmount(
+        BigDecimal principalAmount,
+        BigDecimal annualInterestRate,
+        int repaymentMonths
+    ) {
+        if (repaymentMonths <= 0) {
+            return principalAmount;
+        }
+        if (principalAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO;
         }
 
+        BigDecimal monthlyRate = annualInterestRate
+            .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
+            .divide(BigDecimal.valueOf(12), 10, RoundingMode.HALF_UP);
+
+        if (monthlyRate.compareTo(BigDecimal.ZERO) == 0) {
+            return principalAmount.divide(BigDecimal.valueOf(repaymentMonths), 2, RoundingMode.HALF_UP);
+        }
+
+        BigDecimal factor = BigDecimal.ONE.add(monthlyRate).pow(repaymentMonths);
+        BigDecimal numerator = principalAmount.multiply(monthlyRate).multiply(factor);
+        BigDecimal denominator = factor.subtract(BigDecimal.ONE);
+
+        return numerator.divide(denominator, 2, RoundingMode.HALF_UP);
+    }
+
+    private int resolveRepaymentMonths(LoanApplication loanApplication) {
         String loanTerm = loanApplication.getLoanTerm();
         if (loanTerm != null) {
             String digits = loanTerm.replaceAll("[^0-9]", "");
             if (!digits.isBlank()) {
                 return Integer.parseInt(digits);
             }
+        }
+
+        Integer repaymentPeriodMonth = loanApplication.getLoanProduct().getRepaymentPeriodMonth();
+        if (repaymentPeriodMonth != null && repaymentPeriodMonth > 0) {
+            return repaymentPeriodMonth;
         }
 
         return 12;

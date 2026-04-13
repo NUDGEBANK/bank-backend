@@ -36,12 +36,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class LoanRepaymentService {
 
     private static final String SELF_DEVELOPMENT_TYPE = "SELF_DEVELOPMENT";
+    private static final String CONSUMPTION_ANALYSIS_TYPE = "CONSUMPTION_ANALYSIS";
+    private static final String YOUTH_LOAN_PRODUCT_KEY = "youth-loan";
+    private static final String CONSUMPTION_LOAN_PRODUCT_KEY = "consumption-loan";
     private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
     private static final BigDecimal OVERDUE_SPREAD = new BigDecimal("3.0");
     private static final BigDecimal MAX_OVERDUE_RATE = new BigDecimal("15.0");
     private static final String REPAYMENT_CATEGORY_NAME = "대출상환";
     private static final String REPAYMENT_MCC = "6012";
     private static final String REPAYMENT_MARKET_NAME = "NudgeBank 대출 상환";
+    private static final String EQUAL_INSTALLMENT_TYPE = "EQUAL_INSTALLMENT";
 
     private final LoanRepository loanRepository;
     private final LoanHistoryRepository loanHistoryRepository;
@@ -53,13 +57,14 @@ public class LoanRepaymentService {
     private final MarketRepository marketRepository;
 
     public LoanRepaymentExecuteResponse repay(Long memberId, String productKey, BigDecimal requestedAmount) {
-        ResolvedLoan resolvedLoan = resolveSelfDevelopmentLoan(memberId, productKey);
-        List<RepaymentSchedule> targetSchedules = resolveTargetSchedules(resolvedLoan.loanHistory());
+        ResolvedLoan resolvedLoan = resolveLoan(memberId, productKey);
+        refreshEqualInstallmentSchedulesIfNeeded(resolvedLoan.loanHistory(), resolvedLoan.loan());
+        List<RepaymentSchedule> targetSchedules = resolveTargetSchedules(resolvedLoan.loanHistory(), resolvedLoan.loan());
         if (targetSchedules.isEmpty()) {
-            throw new IllegalStateException("상환할 예정 회차가 없습니다.");
+            throw new IllegalArgumentException("현재 도래한 상환 회차가 없습니다.");
         }
 
-        BigDecimal payableAmount = calculatePayableAmount(targetSchedules, resolvedLoan.loan());
+        BigDecimal payableAmount = calculatePayableAmount(targetSchedules, resolvedLoan.loan(), true);
         BigDecimal repaymentAmount = normalizeRequestedAmount(requestedAmount, payableAmount);
         if (repaymentAmount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("상환 금액은 0보다 커야 합니다.");
@@ -73,7 +78,8 @@ public class LoanRepaymentService {
             resolvedLoan.loanHistory(),
             resolvedLoan.loan(),
             targetSchedules,
-            repaymentAmount
+            repaymentAmount,
+            true
         );
 
         CardTransaction transaction = cardTransactionRepository.save(CardTransaction.builder()
@@ -83,7 +89,7 @@ public class LoanRepaymentService {
             .category(resolveRepaymentCategory())
             .amount(appliedRepayment.totalPaid())
             .transactionDatetime(OffsetDateTime.now())
-            .menuName("자기계발 대출 상환")
+            .menuName(resolveManualRepaymentMenuName(resolvedLoan.loan()))
             .quantity(1)
             .build());
 
@@ -96,7 +102,7 @@ public class LoanRepaymentService {
             nullSafe(resolvedLoan.loanHistory().getRemainingPrincipal())
         ));
 
-        syncLoanHistoryStatus(resolvedLoan.loanHistory());
+        syncLoanHistoryStatus(resolvedLoan.loanHistory(), resolvedLoan.loan());
 
         return new LoanRepaymentExecuteResponse(
             appliedRepayment.totalPaid(),
@@ -119,7 +125,7 @@ public class LoanRepaymentService {
             .toList();
 
         if (dueSchedules.isEmpty()) {
-            syncLoanHistoryStatus(resolvedLoan.loanHistory());
+            syncLoanHistoryStatus(resolvedLoan.loanHistory(), resolvedLoan.loan());
             return new LoanRepaymentExecuteResponse(
                 ZERO,
                 ZERO,
@@ -133,9 +139,9 @@ public class LoanRepaymentService {
             );
         }
 
-        BigDecimal dueAmount = calculatePayableAmount(dueSchedules, resolvedLoan.loan());
+        BigDecimal dueAmount = calculatePayableAmount(dueSchedules, resolvedLoan.loan(), true);
         if (dueAmount.compareTo(BigDecimal.ZERO) <= 0) {
-            syncLoanHistoryStatus(resolvedLoan.loanHistory());
+            syncLoanHistoryStatus(resolvedLoan.loanHistory(), resolvedLoan.loan());
             return new LoanRepaymentExecuteResponse(
                 ZERO,
                 ZERO,
@@ -153,7 +159,7 @@ public class LoanRepaymentService {
             .orElseThrow(() -> new EntityNotFoundException("상환 계좌를 찾을 수 없습니다."));
 
         if (availableBalance(sourceAccount).compareTo(dueAmount) < 0) {
-            syncLoanHistoryStatus(resolvedLoan.loanHistory());
+            syncLoanHistoryStatus(resolvedLoan.loanHistory(), resolvedLoan.loan());
             return new LoanRepaymentExecuteResponse(
                 ZERO,
                 ZERO,
@@ -172,7 +178,8 @@ public class LoanRepaymentService {
             resolvedLoan.loanHistory(),
             resolvedLoan.loan(),
             dueSchedules,
-            dueAmount
+            dueAmount,
+            true
         );
 
         CardTransaction transaction = cardTransactionRepository.save(CardTransaction.builder()
@@ -195,7 +202,7 @@ public class LoanRepaymentService {
             nullSafe(resolvedLoan.loanHistory().getRemainingPrincipal())
         ));
 
-        syncLoanHistoryStatus(resolvedLoan.loanHistory());
+        syncLoanHistoryStatus(resolvedLoan.loanHistory(), resolvedLoan.loan());
 
         return new LoanRepaymentExecuteResponse(
             appliedRepayment.totalPaid(),
@@ -214,7 +221,8 @@ public class LoanRepaymentService {
         LoanHistory loanHistory,
         Loan loan,
         List<RepaymentSchedule> schedules,
-        BigDecimal requestedAmount
+        BigDecimal requestedAmount,
+        boolean applyOverdueInterest
     ) {
         BigDecimal remainingAmount = requestedAmount;
         BigDecimal paidPrincipal = ZERO;
@@ -233,16 +241,26 @@ public class LoanRepaymentService {
             BigDecimal overdueInterest = calculateOverdueInterest(
                 unpaidPrincipal.add(unpaidInterest),
                 currentInterestRate,
-                overdueDays
+                applyOverdueInterest ? overdueDays : 0
             );
 
             BigDecimal interestDue = unpaidInterest.add(overdueInterest);
             BigDecimal interestPayment = remainingAmount.min(interestDue);
             if (interestPayment.compareTo(BigDecimal.ZERO) > 0) {
-                schedule.addPaidInterest(interestPayment);
-                paidInterest = paidInterest.add(interestPayment);
-                BigDecimal overdueInterestPayment = interestPayment.min(overdueInterest);
-                paidOverdueInterest = paidOverdueInterest.add(overdueInterestPayment);
+                if (isConsumptionAnalysisLoan(loan)) {
+                    BigDecimal plannedInterestPayment = interestPayment.min(unpaidInterest);
+                    if (plannedInterestPayment.compareTo(BigDecimal.ZERO) > 0) {
+                        schedule.addPaidInterest(plannedInterestPayment);
+                        paidInterest = paidInterest.add(plannedInterestPayment);
+                    }
+                    BigDecimal overdueInterestPayment = interestPayment.subtract(plannedInterestPayment).max(BigDecimal.ZERO);
+                    paidOverdueInterest = paidOverdueInterest.add(overdueInterestPayment);
+                } else {
+                    schedule.addPaidInterest(interestPayment);
+                    paidInterest = paidInterest.add(interestPayment);
+                    BigDecimal overdueInterestPayment = interestPayment.min(overdueInterest);
+                    paidOverdueInterest = paidOverdueInterest.add(overdueInterestPayment);
+                }
                 remainingAmount = remainingAmount.subtract(interestPayment);
             }
 
@@ -263,7 +281,9 @@ public class LoanRepaymentService {
         }
 
         repaymentScheduleRepository.saveAll(schedules);
-        if (paidPrincipal.compareTo(BigDecimal.ZERO) > 0) {
+        if (isConsumptionAnalysisLoan(loan)) {
+            loanHistory.synchronizeRemainingPrincipal(sumRemainingPrincipal(schedules));
+        } else if (paidPrincipal.compareTo(BigDecimal.ZERO) > 0) {
             loanHistory.applyRepayment(paidPrincipal);
         }
 
@@ -275,7 +295,7 @@ public class LoanRepaymentService {
         );
     }
 
-    private void syncLoanHistoryStatus(LoanHistory loanHistory) {
+    private void syncLoanHistoryStatus(LoanHistory loanHistory, Loan loan) {
         List<RepaymentSchedule> allSchedules =
             repaymentScheduleRepository.findAllByLoanHistory_IdOrderByDueDateAsc(loanHistory.getId());
 
@@ -283,7 +303,6 @@ public class LoanRepaymentService {
             .filter(schedule -> !Boolean.TRUE.equals(schedule.getIsSettled()))
             .findFirst()
             .orElse(null);
-
         boolean hasOverdue = allSchedules.stream()
             .anyMatch(schedule -> !Boolean.TRUE.equals(schedule.getIsSettled()) && calculateOverdueDays(schedule) > 0);
 
@@ -295,10 +314,19 @@ public class LoanRepaymentService {
         }
 
         repaymentScheduleRepository.saveAll(allSchedules);
+        if (loan != null
+            && loan.getLoanApplication() != null
+            && loan.getLoanApplication().getLoanProduct() != null
+            && CONSUMPTION_ANALYSIS_TYPE.equals(loan.getLoanApplication().getLoanProduct().getLoanProductType())) {
+            loanHistory.synchronizeRemainingPrincipal(sumRemainingPrincipal(allSchedules));
+            loanHistory.syncRepaymentStatus(nextSchedule != null ? nextSchedule.getDueDate() : null, hasOverdue);
+            return;
+        }
+
         loanHistory.syncRepaymentStatus(nextSchedule != null ? nextSchedule.getDueDate() : null, hasOverdue);
     }
 
-    private BigDecimal calculatePayableAmount(List<RepaymentSchedule> schedules, Loan loan) {
+    private BigDecimal calculatePayableAmount(List<RepaymentSchedule> schedules, Loan loan, boolean applyOverdueInterest) {
         BigDecimal total = ZERO;
         for (RepaymentSchedule schedule : schedules) {
             BigDecimal unpaidPrincipal = schedule.getRemainingPlannedPrincipal();
@@ -306,14 +334,14 @@ public class LoanRepaymentService {
             BigDecimal overdueInterest = calculateOverdueInterest(
                 unpaidPrincipal.add(unpaidInterest),
                 nullSafe(loan.getInterestRate()),
-                calculateOverdueDays(schedule)
+                applyOverdueInterest ? calculateOverdueDays(schedule) : 0
             );
             total = total.add(unpaidPrincipal).add(unpaidInterest).add(overdueInterest);
         }
         return total.setScale(2, RoundingMode.HALF_UP);
     }
 
-    private List<RepaymentSchedule> resolveTargetSchedules(LoanHistory loanHistory) {
+    private List<RepaymentSchedule> resolveTargetSchedules(LoanHistory loanHistory, Loan loan) {
         List<RepaymentSchedule> unsettledSchedules =
             repaymentScheduleRepository.findAllUnsettledByLoanHistoryIdForUpdate(loanHistory.getId());
         if (unsettledSchedules.isEmpty()) {
@@ -328,18 +356,42 @@ public class LoanRepaymentService {
             return dueSchedules;
         }
 
+        if (isConsumptionAnalysisLoan(loan)) {
+            boolean hasPrepaidFutureSchedule = repaymentScheduleRepository
+                .findAllByLoanHistory_IdOrderByDueDateAsc(loanHistory.getId()).stream()
+                .anyMatch(schedule -> Boolean.TRUE.equals(schedule.getIsSettled())
+                    && schedule.getDueDate() != null
+                    && schedule.getDueDate().isAfter(LocalDate.now()));
+            if (hasPrepaidFutureSchedule) {
+                return List.of();
+            }
+        }
+
         return List.of(unsettledSchedules.get(0));
     }
 
     private ResolvedLoan resolveSelfDevelopmentLoan(Long memberId, String productKey) {
-        if (!"youth-loan".equals(productKey)) {
+        if (!YOUTH_LOAN_PRODUCT_KEY.equals(productKey)) {
             throw new IllegalArgumentException("자기계발 대출만 상환할 수 있습니다.");
         }
+
+        return resolveLoanByProductType(memberId, SELF_DEVELOPMENT_TYPE);
+    }
+
+    private ResolvedLoan resolveLoan(Long memberId, String productKey) {
+        return switch (productKey) {
+            case YOUTH_LOAN_PRODUCT_KEY -> resolveLoanByProductType(memberId, SELF_DEVELOPMENT_TYPE);
+            case CONSUMPTION_LOAN_PRODUCT_KEY -> resolveLoanByProductType(memberId, CONSUMPTION_ANALYSIS_TYPE);
+            default -> throw new IllegalArgumentException("지원하지 않는 상품입니다. productKey=" + productKey);
+        };
+    }
+
+    private ResolvedLoan resolveLoanByProductType(Long memberId, String loanProductType) {
 
         Loan loan = loanRepository
             .findTopByMember_MemberIdAndLoanApplication_LoanProduct_LoanProductTypeOrderByStartDateDescIdDesc(
                 memberId,
-                SELF_DEVELOPMENT_TYPE
+                loanProductType
             )
             .orElseThrow(() -> new EntityNotFoundException("상환 대상 대출을 찾을 수 없습니다."));
 
@@ -359,6 +411,127 @@ public class LoanRepaymentService {
             .orElseThrow(() -> new EntityNotFoundException("상환 대상 대출 이력을 찾을 수 없습니다."));
 
         return new ResolvedLoan(loan, loanHistory);
+    }
+
+    private void refreshEqualInstallmentSchedulesIfNeeded(LoanHistory loanHistory, Loan loan) {
+        if (loan.getLoanApplication() == null
+            || loan.getLoanApplication().getLoanProduct() == null
+            || !CONSUMPTION_ANALYSIS_TYPE.equals(loan.getLoanApplication().getLoanProduct().getLoanProductType())
+            || !EQUAL_INSTALLMENT_TYPE.equals(loan.getLoanApplication().getLoanProduct().getRepaymentType())) {
+            return;
+        }
+
+        List<RepaymentSchedule> schedules = repaymentScheduleRepository.findAllByLoanHistory_IdOrderByDueDateAsc(loanHistory.getId());
+        if (schedules.isEmpty()) {
+            return;
+        }
+
+        List<RepaymentSchedule> unsettledSchedules = schedules.stream()
+            .filter(schedule -> !Boolean.TRUE.equals(schedule.getIsSettled()))
+            .toList();
+        if (unsettledSchedules.isEmpty()) {
+            return;
+        }
+
+        BigDecimal monthlyPayment = calculateEqualInstallmentAmount(
+            nullSafe(loanHistory.getTotalPrincipal()),
+            nullSafe(loan.getInterestRate()),
+            schedules.size()
+        );
+        BigDecimal remainingPrincipal = nullSafe(loanHistory.getRemainingPrincipal());
+        boolean changed = false;
+
+        int remainingUntouchedSchedules = (int) unsettledSchedules.stream()
+            .filter(schedule -> !hasRecordedPayment(schedule))
+            .count();
+
+        for (RepaymentSchedule schedule : unsettledSchedules) {
+            if (hasRecordedPayment(schedule)) {
+                if (schedule.normalizePaidAmounts()) {
+                    changed = true;
+                }
+                remainingPrincipal = remainingPrincipal.subtract(nullSafe(schedule.getRemainingPlannedPrincipal())).max(BigDecimal.ZERO);
+                continue;
+            }
+
+            BigDecimal plannedInterest = remainingPrincipal
+                .multiply(nullSafe(loan.getInterestRate()))
+                .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
+                .divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
+            BigDecimal plannedPrincipal = remainingUntouchedSchedules == 1
+                ? remainingPrincipal
+                : monthlyPayment.subtract(plannedInterest).max(BigDecimal.ZERO);
+
+            if (nullSafe(schedule.getPlannedPrincipal()).compareTo(plannedPrincipal) != 0
+                || nullSafe(schedule.getPlannedInterest()).compareTo(plannedInterest) != 0) {
+                schedule.updatePlannedAmounts(plannedPrincipal, plannedInterest);
+                changed = true;
+            }
+
+            remainingPrincipal = remainingPrincipal.subtract(plannedPrincipal).max(BigDecimal.ZERO);
+            remainingUntouchedSchedules--;
+        }
+
+        if (changed) {
+            repaymentScheduleRepository.saveAll(schedules);
+        }
+    }
+
+    private BigDecimal calculateEqualInstallmentAmount(
+        BigDecimal principalAmount,
+        BigDecimal annualInterestRate,
+        int repaymentMonths
+    ) {
+        if (repaymentMonths <= 0) {
+            return principalAmount;
+        }
+        if (principalAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return ZERO;
+        }
+
+        BigDecimal monthlyRate = annualInterestRate
+            .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
+            .divide(BigDecimal.valueOf(12), 10, RoundingMode.HALF_UP);
+
+        if (monthlyRate.compareTo(BigDecimal.ZERO) == 0) {
+            return principalAmount.divide(BigDecimal.valueOf(repaymentMonths), 2, RoundingMode.HALF_UP);
+        }
+
+        BigDecimal factor = BigDecimal.ONE.add(monthlyRate).pow(repaymentMonths);
+        BigDecimal numerator = principalAmount.multiply(monthlyRate).multiply(factor);
+        BigDecimal denominator = factor.subtract(BigDecimal.ONE);
+
+        return numerator.divide(denominator, 2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal sumRemainingPrincipal(List<RepaymentSchedule> schedules) {
+        return schedules.stream()
+            .map(RepaymentSchedule::getRemainingPlannedPrincipal)
+            .map(this::nullSafe)
+            .reduce(ZERO, BigDecimal::add)
+            .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private boolean isConsumptionAnalysisLoan(Loan loan) {
+        return loan != null
+            && loan.getLoanApplication() != null
+            && loan.getLoanApplication().getLoanProduct() != null
+            && CONSUMPTION_ANALYSIS_TYPE.equals(loan.getLoanApplication().getLoanProduct().getLoanProductType());
+    }
+
+    private boolean hasRecordedPayment(RepaymentSchedule schedule) {
+        return nullSafe(schedule.getPaidPrincipal()).compareTo(BigDecimal.ZERO) > 0
+            || nullSafe(schedule.getPaidInterest()).compareTo(BigDecimal.ZERO) > 0;
+    }
+
+    private String resolveManualRepaymentMenuName(Loan loan) {
+        if (loan != null
+            && loan.getLoanApplication() != null
+            && loan.getLoanApplication().getLoanProduct() != null
+            && CONSUMPTION_ANALYSIS_TYPE.equals(loan.getLoanApplication().getLoanProduct().getLoanProductType())) {
+            return "소비분석 대출 상환";
+        }
+        return "자기계발 대출 상환";
     }
 
     private BigDecimal normalizeRequestedAmount(BigDecimal requestedAmount, BigDecimal payableAmount) {
