@@ -205,7 +205,7 @@ public class AutoRepaymentExecutionService {
                 .multiply(ratio)
                 .setScale(2, RoundingMode.HALF_UP);
 
-        BigDecimal availableBalance = nullSafe(account.getBalance()).subtract(nullSafe(account.getProtectedBalance()));
+        BigDecimal availableBalance = nullSafe(account.getBalance());
         return requestedAmount.min(availableBalance).max(ZERO);
     }
 
