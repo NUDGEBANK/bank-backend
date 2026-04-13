@@ -28,6 +28,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -47,6 +48,9 @@ public class DepositAccountService {
     private static final String TRANSACTION_PAY = "PAY";
     private static final String TRANSACTION_MATURITY = "MATURITY";
     private static final String TRANSACTION_EARLY_CLOSE = "EARLY_CLOSE";
+    private static final String TRANSACTION_STATUS_COMPLETED = "COMPLETED";
+    private static final String AUTO_TRANSFER_STATUS_READY = "READY";
+    private static final String AUTO_TRANSFER_STATUS_SUCCESS = "SUCCESS";
 
     private final AccountRepository accountRepository;
     private final DepositProductRepository depositProductRepository;
@@ -70,7 +74,7 @@ public class DepositAccountService {
                 request.savingMonth(),
                 request.savingMonth()
             )
-            .orElseThrow(() -> new IllegalArgumentException("선택한 기간에 해당하는 금리 정보를 찾을 수 없습니다."));
+            .orElseThrow(() -> new IllegalArgumentException("선택한 기간에 해당하는 금리 정보가 없습니다."));
 
         Account linkedAccount = accountRepository.findByIdForUpdate(request.accountId())
             .filter(account -> Objects.equals(account.getMemberId(), memberId))
@@ -103,7 +107,7 @@ public class DepositAccountService {
                 linkedAccount,
                 TRANSACTION_OPEN,
                 request.joinAmount(),
-                "COMPLETED"
+                TRANSACTION_STATUS_COMPLETED
             )
         );
 
@@ -164,10 +168,10 @@ public class DepositAccountService {
         DepositAccount depositAccount = getOwnedDepositAccountForUpdate(memberId, depositAccountId);
 
         if (!depositAccount.isActive()) {
-            throw new IllegalArgumentException("해당 예적금 계좌는 입금할 수 없는 상태입니다.");
+            throw new IllegalArgumentException("해당 예적금 계좌는 납입할 수 없는 상태입니다.");
         }
         if (PRODUCT_TYPE_FIXED_DEPOSIT.equals(depositAccount.getDepositProduct().getDepositProductType())) {
-            throw new IllegalArgumentException("정기예금은 추가 입금을 지원하지 않습니다.");
+            throw new IllegalArgumentException("정기예금은 추가 납입을 지원하지 않습니다.");
         }
 
         DepositPaymentSchedule schedule = depositPaymentScheduleRepository
@@ -176,7 +180,7 @@ public class DepositAccountService {
 
         BigDecimal amount = scale(request.amount());
         if (amount.compareTo(scale(schedule.getPlannedAmount())) != 0) {
-            throw new IllegalArgumentException("예정된 납입 금액과 동일한 금액만 입금할 수 있습니다.");
+            throw new IllegalArgumentException("예정 납입 금액과 동일한 금액만 납입할 수 있습니다.");
         }
 
         Account linkedAccount = accountRepository.findByIdForUpdate(depositAccount.getAccount().getAccountId())
@@ -187,7 +191,14 @@ public class DepositAccountService {
         schedule.markPaid(amount, OffsetDateTime.now());
 
         depositTransactionRepository.save(
-            createTransaction(depositAccount, schedule, linkedAccount, TRANSACTION_PAY, amount, "COMPLETED")
+            createTransaction(
+                depositAccount,
+                schedule,
+                linkedAccount,
+                TRANSACTION_PAY,
+                amount,
+                TRANSACTION_STATUS_COMPLETED
+            )
         );
 
         return new DepositAccountActionResponse(
@@ -195,13 +206,15 @@ public class DepositAccountService {
             depositAccount.getStatus(),
             depositAccount.getCurrentBalance(),
             amount,
-            "예적금 입금이 완료되었습니다."
+            "예적금 납입이 완료되었습니다."
         );
     }
 
     @Transactional
     public DepositAccountActionResponse withdraw(Long memberId, Long depositAccountId) {
         DepositAccount depositAccount = getOwnedDepositAccountForUpdate(memberId, depositAccountId);
+        List<DepositPaymentSchedule> schedules = depositPaymentScheduleRepository
+            .findAllByDepositAccount_DepositAccountIdOrderByInstallmentNoAsc(depositAccountId);
 
         Account linkedAccount = accountRepository.findByIdForUpdate(depositAccount.getAccount().getAccountId())
             .orElseThrow(() -> new EntityNotFoundException("연결 계좌를 찾을 수 없습니다."));
@@ -209,24 +222,29 @@ public class DepositAccountService {
         boolean matured = !depositAccount.getMaturityDate().isAfter(LocalDate.now());
         String nextStatus = matured ? STATUS_CLOSED : STATUS_EARLY_CLOSED;
         String transactionType = matured ? TRANSACTION_MATURITY : TRANSACTION_EARLY_CLOSE;
+        BigDecimal payoutAmount = calculatePayoutAmount(depositAccount, schedules, matured);
+        BigDecimal principalAmount = depositAccount.close(nextStatus);
 
-        BigDecimal withdrawnAmount = depositAccount.close(nextStatus);
-        linkedAccount.deposit(withdrawnAmount);
-
-        depositPaymentScheduleRepository
-            .findAllByDepositAccount_DepositAccountIdOrderByInstallmentNoAsc(depositAccountId)
-            .forEach(DepositPaymentSchedule::cancel);
+        linkedAccount.deposit(payoutAmount);
+        schedules.forEach(DepositPaymentSchedule::cancel);
 
         depositTransactionRepository.save(
-            createTransaction(depositAccount, null, linkedAccount, transactionType, withdrawnAmount, "COMPLETED")
+            createTransaction(
+                depositAccount,
+                null,
+                linkedAccount,
+                transactionType,
+                payoutAmount,
+                TRANSACTION_STATUS_COMPLETED
+            )
         );
 
         return new DepositAccountActionResponse(
             depositAccount.getDepositAccountId(),
             depositAccount.getStatus(),
             depositAccount.getCurrentBalance(),
-            withdrawnAmount,
-            matured ? "만기 해지가 완료되었습니다." : "중도 해지가 완료되었습니다."
+            payoutAmount,
+            buildWithdrawMessage(matured, payoutAmount.subtract(principalAmount))
         );
     }
 
@@ -274,6 +292,7 @@ public class DepositAccountService {
     private void createSavingSchedules(DepositAccount depositAccount, Account linkedAccount, DepositAccountCreateRequest request) {
         List<DepositPaymentSchedule> schedules = new ArrayList<>();
         BigDecimal monthlyAmount = scale(request.monthlyPaymentAmount());
+        boolean autoTransferEnabled = Boolean.TRUE.equals(request.autoTransferYn());
 
         for (int installmentNo = 1; installmentNo <= request.savingMonth(); installmentNo++) {
             boolean firstInstallment = installmentNo == 1;
@@ -285,9 +304,9 @@ public class DepositAccountService {
                 .dueDate(depositAccount.getStartDate().plusMonths(installmentNo - 1L))
                 .plannedAmount(plannedAmount)
                 .isPaid(firstInstallment)
-                .autoTransferYn(Boolean.TRUE.equals(request.autoTransferYn()))
+                .autoTransferYn(autoTransferEnabled)
                 .autoTransferDay(request.autoTransferDay())
-                .autoTransferStatus(firstInstallment ? "COMPLETED" : "PENDING");
+                .autoTransferStatus(resolveAutoTransferStatus(autoTransferEnabled, firstInstallment));
 
             if (firstInstallment) {
                 builder.paidAmount(scale(request.joinAmount()));
@@ -298,6 +317,86 @@ public class DepositAccountService {
         }
 
         depositPaymentScheduleRepository.saveAll(schedules);
+    }
+
+    private BigDecimal calculatePayoutAmount(
+        DepositAccount depositAccount,
+        List<DepositPaymentSchedule> schedules,
+        boolean matured
+    ) {
+        BigDecimal principal = scale(depositAccount.getCurrentBalance());
+        if (!matured) {
+            return principal;
+        }
+
+        BigDecimal interest = PRODUCT_TYPE_FIXED_DEPOSIT.equals(depositAccount.getDepositProduct().getDepositProductType())
+            ? calculateFixedDepositInterest(depositAccount)
+            : calculateInstallmentSavingInterest(depositAccount, schedules);
+
+        return principal.add(interest);
+    }
+
+    private BigDecimal calculateFixedDepositInterest(DepositAccount depositAccount) {
+        long depositDays = Math.max(
+            0L,
+            ChronoUnit.DAYS.between(depositAccount.getStartDate(), depositAccount.getMaturityDate())
+        );
+        return calculateSimpleInterest(depositAccount.getJoinAmount(), depositAccount.getInterestRate(), depositDays);
+    }
+
+    private BigDecimal calculateInstallmentSavingInterest(
+        DepositAccount depositAccount,
+        List<DepositPaymentSchedule> schedules
+    ) {
+        LocalDate maturityDate = depositAccount.getMaturityDate();
+        BigDecimal totalInterest = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+
+        for (DepositPaymentSchedule schedule : schedules) {
+            if (!Boolean.TRUE.equals(schedule.getIsPaid()) || schedule.getPaidAmount() == null) {
+                continue;
+            }
+
+            LocalDate paidDate = schedule.getPaidAt() != null
+                ? schedule.getPaidAt().toLocalDate()
+                : schedule.getDueDate();
+            long depositDays = Math.max(0L, ChronoUnit.DAYS.between(paidDate, maturityDate));
+            totalInterest = totalInterest.add(
+                calculateSimpleInterest(schedule.getPaidAmount(), depositAccount.getInterestRate(), depositDays)
+            );
+        }
+
+        return scale(totalInterest);
+    }
+
+    private BigDecimal calculateSimpleInterest(BigDecimal principal, BigDecimal interestRate, long depositDays) {
+        if (principal == null || interestRate == null || depositDays <= 0L) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        BigDecimal interest = principal
+            .multiply(interestRate)
+            .multiply(BigDecimal.valueOf(depositDays))
+            .divide(BigDecimal.valueOf(36500L), 2, RoundingMode.HALF_UP);
+        return scale(interest);
+    }
+
+    private String resolveAutoTransferStatus(boolean autoTransferEnabled, boolean firstInstallment) {
+        if (!autoTransferEnabled) {
+            return null;
+        }
+        return firstInstallment ? AUTO_TRANSFER_STATUS_SUCCESS : AUTO_TRANSFER_STATUS_READY;
+    }
+
+    private String buildWithdrawMessage(boolean matured, BigDecimal interestAmount) {
+        if (!matured) {
+            return "중도 해지가 완료되었습니다.";
+        }
+
+        BigDecimal scaledInterest = scale(interestAmount);
+        if (scaledInterest.compareTo(BigDecimal.ZERO) <= 0) {
+            return "만기 해지가 완료되었습니다.";
+        }
+        return "만기 해지가 완료되었습니다. (이자 " + scaledInterest.toPlainString() + "원 포함)";
     }
 
     private String generateDepositAccountNumber() {
@@ -384,7 +483,7 @@ public class DepositAccountService {
 
     private BigDecimal scale(BigDecimal amount) {
         if (amount == null) {
-            return BigDecimal.ZERO.setScale(2);
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         }
         return amount.setScale(2, RoundingMode.HALF_UP);
     }

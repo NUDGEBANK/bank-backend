@@ -37,12 +37,14 @@ public class SecurityConfig {
         .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(auth -> auth
             .requestMatchers("/api/auth/**").permitAll()
+            .requestMatchers("/api/accounts/me").authenticated()
             .requestMatchers("/api/cards/payment").authenticated()
             .requestMatchers("/api/finance-status/**").authenticated()
             .requestMatchers("/api/baselines/**").authenticated()
             .requestMatchers("/api/auto-repayment/**").authenticated()
             .requestMatchers("/api/loan-applications/**").authenticated()
             .requestMatchers("/api/loans/me/**").authenticated()
+            .requestMatchers("/api/deposit-accounts/**").authenticated()
             .requestMatchers("/api/certificates/**").authenticated()
             .anyRequest().permitAll()
         );

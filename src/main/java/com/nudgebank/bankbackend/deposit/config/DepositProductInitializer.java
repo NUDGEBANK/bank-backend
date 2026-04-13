@@ -26,30 +26,30 @@ public class DepositProductInitializer implements CommandLineRunner {
             new DepositProductSeed(
                 "정기예금",
                 "FIXED_DEPOSIT",
-                "목돈을 한 번에 예치하고 만기까지 유지하는 기본형 예금 상품입니다.",
-                new BigDecimal("10000.00"),
+                "신한은행의 안정적인 정기예금 운용 방식과 신한저축은행의 디지털 금리 경쟁력을 참고해 리뉴얼한 목돈 예치형 상품입니다. 가입 즉시 금리가 확정되고 만기까지 안정적으로 운용할 수 있습니다.",
+                new BigDecimal("100000.00"),
                 null,
-                1,
+                3,
                 36,
                 List.of(
-                    new RateSeed(1, 6, new BigDecimal("2.80")),
-                    new RateSeed(7, 12, new BigDecimal("3.10")),
-                    new RateSeed(13, 24, new BigDecimal("3.25")),
-                    new RateSeed(25, 36, new BigDecimal("3.35"))
+                    new RateSeed(3, 5, new BigDecimal("3.10")),
+                    new RateSeed(6, 11, new BigDecimal("3.35")),
+                    new RateSeed(12, 23, new BigDecimal("3.55")),
+                    new RateSeed(24, 36, new BigDecimal("3.70"))
                 )
             ),
             new DepositProductSeed(
                 "정기적금",
                 "FIXED_SAVING",
-                "매월 일정 금액을 납입하며 목표 자금을 만들어가는 적금 상품입니다.",
+                "신한은행의 간편결제 연계 적금 구성과 신한저축은행의 실속형 고금리 적금 포지션을 참고한 정기적금 상품입니다. 매월 일정 금액을 납입하며 우대금리 구간을 길게 가져갈 수 있도록 설계했습니다.",
                 new BigDecimal("10000.00"),
-                new BigDecimal("1000000.00"),
+                new BigDecimal("300000.00"),
                 6,
                 36,
                 List.of(
-                    new RateSeed(6, 11, new BigDecimal("3.10")),
-                    new RateSeed(12, 23, new BigDecimal("3.40")),
-                    new RateSeed(24, 36, new BigDecimal("3.60"))
+                    new RateSeed(6, 11, new BigDecimal("3.60")),
+                    new RateSeed(12, 23, new BigDecimal("3.90")),
+                    new RateSeed(24, 36, new BigDecimal("4.20"))
                 )
             )
         );
