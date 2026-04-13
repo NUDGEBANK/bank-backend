@@ -33,6 +33,8 @@ import java.util.Map;
 @Transactional
 public class PersonalBaselineService {
 
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+
     private final MemberRepository memberRepository;
     private final AgeGroupBaselineRepository ageGroupBaselineRepository;
     private final ConsumerBaselineRepository consumerBaselineRepository;
@@ -57,7 +59,7 @@ public class PersonalBaselineService {
             return buildAgeOnlyResponse(memberId, age, ageBaseline,  financialStatus);
         }
 
-        LocalDate today = LocalDate.now(ZoneId.systemDefault());
+        LocalDate today = LocalDate.now(KST);
         LocalDate firstTransactionDate = firstTransactionDatetime.toLocalDate();
         LocalDate ninetyDaysAgo = today.minusDays(90);
         LocalDate baselineStartDate = firstTransactionDate.isAfter(ninetyDaysAgo) ? firstTransactionDate : ninetyDaysAgo;
@@ -65,8 +67,8 @@ public class PersonalBaselineService {
 
         List<CardTransaction> transactions = cardTransactionRepository.findByMemberIdAndTransactionDatetimeBetween(
                 memberId,
-                baselineStartDate.atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime(),
-                baselineEndDate.atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime()
+                baselineStartDate.atStartOfDay(KST).toOffsetDateTime(),
+                baselineEndDate.atStartOfDay(KST).toOffsetDateTime()
         );
 
         if (transactions.isEmpty()) {
@@ -149,7 +151,7 @@ public class PersonalBaselineService {
     }
 
     private void saveOrUpdateConsumerBaseline(Long memberId, PersonalMetrics personal, LocalDate today) {
-        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime now = OffsetDateTime.now(KST);
         LocalDate analysisYearMonth = today.withDayOfMonth(1);
         BigDecimal volatilityIndex = calculateVolatilityIndex(personal.volatility());
 
@@ -261,7 +263,7 @@ public class PersonalBaselineService {
         if (member.getBirth() == null) {
             throw new IllegalArgumentException("회원의 birth 정보가 없습니다. memberId=" + member.getMemberId());
         }
-        return Period.between(member.getBirth(), LocalDate.now()).getYears();
+        return Period.between(member.getBirth(), LocalDate.now(KST)).getYears();
     }
 
     private String toAgeGroup(int age) {

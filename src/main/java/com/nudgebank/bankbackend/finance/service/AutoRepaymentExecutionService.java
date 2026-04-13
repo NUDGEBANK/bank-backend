@@ -54,6 +54,8 @@ public class AutoRepaymentExecutionService {
     private final MarketRepository marketRepository;
     private final MarketCategoryRepository marketCategoryRepository;
 
+    private final PersonalBaselineService  personalBaselineService;
+
     @Async
     @Transactional
     public void executeAfterPaymentReal(Long memberId, Long transactionId) {
@@ -62,6 +64,9 @@ public class AutoRepaymentExecutionService {
             log.info("유효하지 않은 트랜잭션 id 입니다. : " + transactionId);
             return;
         }
+
+        personalBaselineService.calculateAndGetFinalBaseline(memberId, transactionId);
+
         ResolvedConsumptionLoan resolvedLoan = resolveConsumptionAnalysisLoan(memberId, transaction);
         if (resolvedLoan == null) {
             log.info("대출 내역이 없습니다. : " + memberId);
