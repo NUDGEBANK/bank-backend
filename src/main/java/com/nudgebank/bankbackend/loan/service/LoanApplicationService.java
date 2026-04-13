@@ -218,11 +218,6 @@ public class LoanApplicationService {
         CreditHistory creditHistory = resolveCreditHistory(member.getMemberId(), loanProductType);
         Card selectedCard = resolveSelectedCard(member.getMemberId(), request.cardId());
         Account repaymentAccount = resolveDisbursementAccount(member.getMemberId(), selectedCard);
-        BigDecimal protectedBalance = validateProtectedBalance(
-            loanProductType,
-            request.protectedBalance(),
-            request.loanAmount()
-        );
 
         // 대출 신청 (loan_application 저장)
         LoanApplication savedApplication = loanApplicationRepository.save(
@@ -237,7 +232,6 @@ public class LoanApplicationService {
                 .appliedAt(LocalDateTime.now())
                 .reviewComment(request.purpose())
                 .monthlyIncome(request.monthlyIncome())
-                .protectedBalance(protectedBalance)
                 .salaryDate(request.salaryDate())
                 .build()
         );
@@ -331,7 +325,6 @@ public class LoanApplicationService {
         );
 
         repaymentAccount.deposit(principalAmount);
-        repaymentAccount.updateProtectedBalance(resolveProtectedBalanceForExecution(loanApplication, repaymentAccount));
 
         MarketCategory category = resolveLoanCategory();
         Market market = resolveLoanMarket(category);
@@ -558,49 +551,5 @@ public class LoanApplicationService {
         }
 
         throw new IllegalStateException("가상계좌 번호 생성에 실패했습니다.");
-    }
-
-    private BigDecimal validateProtectedBalance(String loanProductType, BigDecimal protectedBalance, BigDecimal loanAmount) {
-        if (!CONSUMPTION_ANALYSIS_TYPE.equals(loanProductType)) {
-            return BigDecimal.ZERO;
-        }
-
-        if (protectedBalance == null) {
-            throw new IllegalArgumentException("보호잔액을 입력해 주세요.");
-        }
-
-        if (protectedBalance.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException("보호잔액은 0 이상이어야 합니다.");
-        }
-
-        BigDecimal sanitizedLoanAmount = nullSafe(loanAmount);
-        if (sanitizedLoanAmount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("대출 신청 금액을 확인해 주세요.");
-        }
-
-        if (protectedBalance.compareTo(sanitizedLoanAmount) > 0) {
-            throw new IllegalArgumentException("보호잔액은 신청 금액보다 클 수 없습니다.");
-        }
-
-        return normalizeProtectedBalanceScale(protectedBalance);
-    }
-
-    private BigDecimal normalizeProtectedBalanceScale(BigDecimal protectedBalance) {
-        try {
-            return protectedBalance.setScale(2, RoundingMode.UNNECESSARY);
-        } catch (ArithmeticException exception) {
-            throw new IllegalArgumentException("보호잔액은 소수점 둘째 자리까지만 입력할 수 있습니다.");
-        }
-    }
-
-    private BigDecimal resolveProtectedBalanceForExecution(LoanApplication loanApplication, Account repaymentAccount) {
-        BigDecimal protectedBalance = nullSafe(loanApplication.getProtectedBalance());
-        BigDecimal currentBalance = nullSafe(repaymentAccount.getBalance());
-
-        if (protectedBalance.compareTo(currentBalance) > 0) {
-            throw new IllegalStateException("보호잔액이 대출 실행 후 계좌 잔액을 초과합니다.");
-        }
-
-        return protectedBalance;
     }
 }

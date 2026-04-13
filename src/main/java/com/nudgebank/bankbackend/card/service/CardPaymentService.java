@@ -58,10 +58,7 @@ public class CardPaymentService {
                 ));
 
         BigDecimal balance = nullSafe(account.getBalance());
-        BigDecimal protectedBalance = nullSafe(account.getProtectedBalance());
-        BigDecimal availableBalance = balance.subtract(protectedBalance);
-
-        if (availableBalance.compareTo(request.amount()) < 0) {
+        if (balance.compareTo(request.amount()) < 0) {
             throw new IllegalArgumentException("잔액이 부족합니다.");
         }
 
