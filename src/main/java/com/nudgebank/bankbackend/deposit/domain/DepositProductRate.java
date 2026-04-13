@@ -15,6 +15,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.Objects;
 
 @Entity
 @Getter
@@ -48,6 +49,15 @@ public class DepositProductRate {
         Integer maxSavingMonth,
         BigDecimal interestRate
     ) {
+        Objects.requireNonNull(depositProduct, "depositProduct는 필수입니다.");
+        if (minSavingMonth == null || minSavingMonth <= 0) {
+            throw new IllegalArgumentException("minSavingMonth는 1 이상이어야 합니다.");
+        }
+        if (maxSavingMonth == null || maxSavingMonth < minSavingMonth) {
+            throw new IllegalArgumentException("maxSavingMonth는 minSavingMonth 이상이어야 합니다.");
+        }
+        validateInterestRate(interestRate);
+
         this.depositProductRateId = depositProductRateId;
         this.depositProduct = depositProduct;
         this.minSavingMonth = minSavingMonth;
@@ -56,6 +66,13 @@ public class DepositProductRate {
     }
 
     public void update(BigDecimal interestRate) {
+        validateInterestRate(interestRate);
         this.interestRate = interestRate;
+    }
+
+    private void validateInterestRate(BigDecimal interestRate) {
+        if (interestRate == null || interestRate.signum() < 0) {
+            throw new IllegalArgumentException("interestRate는 0 이상이어야 합니다.");
+        }
     }
 }

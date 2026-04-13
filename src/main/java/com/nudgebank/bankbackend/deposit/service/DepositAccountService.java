@@ -32,7 +32,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.Random;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -400,12 +400,12 @@ public class DepositAccountService {
     }
 
     private String generateDepositAccountNumber() {
-        Random random = new Random();
-        String candidate;
-        do {
-            candidate = "D-%04d-%06d".formatted(random.nextInt(10_000), random.nextInt(1_000_000));
-        } while (depositAccountRepository.existsByDepositAccountNumber(candidate));
-        return candidate;
+        String normalized = UUID.randomUUID().toString().replace("-", "").toUpperCase();
+        return "D-%s-%s-%s".formatted(
+            normalized.substring(0, 4),
+            normalized.substring(4, 8),
+            normalized.substring(8, 12)
+        );
     }
 
     private DepositTransaction createTransaction(
