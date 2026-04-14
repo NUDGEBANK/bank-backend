@@ -117,106 +117,6 @@ public class LoanRepaymentService {
         );
     }
 
-    public LoanRepaymentExecuteResponse executeAutoRepayment(Long memberId, String productKey) {
-        ResolvedLoan resolvedLoan = resolveSelfDevelopmentLoan(memberId, productKey);
-        List<RepaymentSchedule> dueSchedules = repaymentScheduleRepository
-            .findAllUnsettledByLoanHistoryIdForUpdate(resolvedLoan.loanHistory().getId()).stream()
-            .filter(schedule -> schedule.getDueDate() != null && !schedule.getDueDate().isAfter(LocalDate.now()))
-            .toList();
-
-        if (dueSchedules.isEmpty()) {
-            syncLoanHistoryStatus(resolvedLoan.loanHistory(), resolvedLoan.loan());
-            return new LoanRepaymentExecuteResponse(
-                ZERO,
-                ZERO,
-                ZERO,
-                ZERO,
-                nullSafe(resolvedLoan.loanHistory().getRemainingPrincipal()),
-                resolvedLoan.loanHistory().getStatus(),
-                false,
-                "AUTO_SKIPPED",
-                "NO_DUE_AMOUNT"
-            );
-        }
-
-        BigDecimal dueAmount = calculatePayableAmount(dueSchedules, resolvedLoan.loan(), true);
-        if (dueAmount.compareTo(BigDecimal.ZERO) <= 0) {
-            syncLoanHistoryStatus(resolvedLoan.loanHistory(), resolvedLoan.loan());
-            return new LoanRepaymentExecuteResponse(
-                ZERO,
-                ZERO,
-                ZERO,
-                ZERO,
-                nullSafe(resolvedLoan.loanHistory().getRemainingPrincipal()),
-                resolvedLoan.loanHistory().getStatus(),
-                false,
-                "AUTO_SKIPPED",
-                "NO_DUE_AMOUNT"
-            );
-        }
-
-        Account sourceAccount = accountRepository.findByIdForUpdate(resolvedLoan.loanHistory().getCard().getAccountId())
-            .orElseThrow(() -> new EntityNotFoundException("상환 계좌를 찾을 수 없습니다."));
-
-        if (availableBalance(sourceAccount).compareTo(dueAmount) < 0) {
-            syncLoanHistoryStatus(resolvedLoan.loanHistory(), resolvedLoan.loan());
-            return new LoanRepaymentExecuteResponse(
-                ZERO,
-                ZERO,
-                ZERO,
-                ZERO,
-                nullSafe(resolvedLoan.loanHistory().getRemainingPrincipal()),
-                resolvedLoan.loanHistory().getStatus(),
-                false,
-                "AUTO_FAILED",
-                "INSUFFICIENT_BALANCE"
-            );
-        }
-
-        sourceAccount.withdraw(dueAmount);
-        AppliedRepayment appliedRepayment = applyRepayment(
-            resolvedLoan.loanHistory(),
-            resolvedLoan.loan(),
-            dueSchedules,
-            dueAmount,
-            true
-        );
-
-        CardTransaction transaction = cardTransactionRepository.save(CardTransaction.builder()
-            .card(resolvedLoan.loanHistory().getCard())
-            .market(resolveRepaymentMarket())
-            .qrId(generateRepaymentQrId())
-            .category(resolveRepaymentCategory())
-            .amount(appliedRepayment.totalPaid())
-            .transactionDatetime(OffsetDateTime.now())
-            .menuName("자기계발 대출 자동이체")
-            .quantity(1)
-            .build());
-
-        loanRepaymentHistoryRepository.save(LoanRepaymentHistory.create(
-            resolvedLoan.loanHistory(),
-            transaction,
-            appliedRepayment.totalPaid(),
-            BigDecimal.ZERO,
-            OffsetDateTime.now(),
-            nullSafe(resolvedLoan.loanHistory().getRemainingPrincipal())
-        ));
-
-        syncLoanHistoryStatus(resolvedLoan.loanHistory(), resolvedLoan.loan());
-
-        return new LoanRepaymentExecuteResponse(
-            appliedRepayment.totalPaid(),
-            appliedRepayment.principalPaid(),
-            appliedRepayment.interestPaid(),
-            appliedRepayment.overdueInterestPaid(),
-            nullSafe(resolvedLoan.loanHistory().getRemainingPrincipal()),
-            resolvedLoan.loanHistory().getStatus(),
-            true,
-            "AUTO_COMPLETED",
-            null
-        );
-    }
-
     private AppliedRepayment applyRepayment(
         LoanHistory loanHistory,
         Loan loan,
@@ -368,14 +268,6 @@ public class LoanRepaymentService {
         }
 
         return List.of(unsettledSchedules.get(0));
-    }
-
-    private ResolvedLoan resolveSelfDevelopmentLoan(Long memberId, String productKey) {
-        if (!YOUTH_LOAN_PRODUCT_KEY.equals(productKey)) {
-            throw new IllegalArgumentException("자기계발 대출만 상환할 수 있습니다.");
-        }
-
-        return resolveLoanByProductType(memberId, SELF_DEVELOPMENT_TYPE);
     }
 
     private ResolvedLoan resolveLoan(Long memberId, String productKey) {
