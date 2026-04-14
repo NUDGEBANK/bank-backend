@@ -1,6 +1,7 @@
 package com.nudgebank.bankbackend.loan.service;
 
 import com.nudgebank.bankbackend.card.domain.CardTransaction;
+import com.nudgebank.bankbackend.common.util.WonAmount;
 import com.nudgebank.bankbackend.loan.domain.Loan;
 import com.nudgebank.bankbackend.loan.domain.LoanHistory;
 import com.nudgebank.bankbackend.loan.domain.LoanRepaymentHistory;
@@ -22,7 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class RepaymentService {
 
-    private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+    private static final BigDecimal ZERO = BigDecimal.ZERO;
     private static final BigDecimal OVERDUE_SPREAD = new BigDecimal("3.0");
     private static final BigDecimal MAX_OVERDUE_RATE = new BigDecimal("15.0");
 
@@ -36,7 +37,7 @@ public class RepaymentService {
     ) {
         validateRepaymentRequest(loanHistory, loan, requestedAmount);
 
-        BigDecimal normalizedRequestedAmount = requestedAmount.setScale(2, RoundingMode.HALF_UP);
+        BigDecimal normalizedRequestedAmount = won(requestedAmount);
         BigDecimal payableAmount = calculatePayableAmount(loanHistory, loan);
         if (normalizedRequestedAmount.compareTo(payableAmount) > 0) {
             throw new IllegalArgumentException("상환 가능 금액을 초과했습니다.");
@@ -62,14 +63,21 @@ public class RepaymentService {
             syncLoanHistory(loanHistory);
             return RepaymentResult.notApplied(nullSafe(loanHistory.getRemainingPrincipal()), requestedAmount);
         }
+        List<RepaymentSchedule> allSchedules =
+                repaymentScheduleRepository.findAllByLoanHistory_IdOrderByDueDateAsc(loanHistory.getId());
+        List<RepaymentSchedule> targetSchedules = resolveRepaymentTargetSchedules(allSchedules, unsettledSchedules);
+        if (targetSchedules.isEmpty()) {
+            syncLoanHistory(loanHistory);
+            return RepaymentResult.notApplied(nullSafe(loanHistory.getRemainingPrincipal()), requestedAmount);
+        }
 
-        BigDecimal remainingAmount = requestedAmount.setScale(2, RoundingMode.HALF_UP);
+        BigDecimal remainingAmount = won(requestedAmount);
         BigDecimal paidPrincipal = ZERO;
         BigDecimal paidInterest = ZERO;
         BigDecimal paidOverdueInterest = ZERO;
         int settledScheduleCount = 0;
 
-        for (RepaymentSchedule schedule : unsettledSchedules) {
+        for (RepaymentSchedule schedule : targetSchedules) {
             if (remainingAmount.compareTo(BigDecimal.ZERO) <= 0) {
                 break;
             }
@@ -105,19 +113,19 @@ public class RepaymentService {
             }
         }
 
-        repaymentScheduleRepository.saveAll(unsettledSchedules);
+        repaymentScheduleRepository.saveAll(targetSchedules);
         BigDecimal remainingPrincipal = syncLoanHistory(loanHistory);
-        BigDecimal totalPaid = paidPrincipal.add(paidInterest).add(paidOverdueInterest).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal totalPaid = won(paidPrincipal.add(paidInterest).add(paidOverdueInterest));
 
         return new RepaymentResult(
                 totalPaid.compareTo(BigDecimal.ZERO) > 0,
-                requestedAmount.setScale(2, RoundingMode.HALF_UP),
+                won(requestedAmount),
                 totalPaid,
-                paidPrincipal.setScale(2, RoundingMode.HALF_UP),
-                paidInterest.setScale(2, RoundingMode.HALF_UP),
-                paidOverdueInterest.setScale(2, RoundingMode.HALF_UP),
-                remainingAmount.setScale(2, RoundingMode.HALF_UP),
-                remainingPrincipal,
+                won(paidPrincipal),
+                won(paidInterest),
+                won(paidOverdueInterest),
+                won(remainingAmount),
+                won(remainingPrincipal),
                 loanHistory.getStatus(),
                 settledScheduleCount
         );
@@ -160,10 +168,10 @@ public class RepaymentService {
         loanRepaymentHistoryRepository.save(LoanRepaymentHistory.create(
                 loanHistory,
                 transaction,
-                result.totalPaid(),
+                won(result.totalPaid()),
                 nullSafe(repaymentRate),
                 OffsetDateTime.now(),
-                result.remainingPrincipal()
+                won(result.remainingPrincipal())
         ));
     }
 
@@ -175,7 +183,13 @@ public class RepaymentService {
             throw new IllegalArgumentException("loan is required.");
         }
 
-        return repaymentScheduleRepository.findAllUnsettledByLoanHistoryIdForUpdate(loanHistory.getId()).stream()
+        List<RepaymentSchedule> unsettledSchedules =
+                repaymentScheduleRepository.findAllUnsettledByLoanHistoryIdForUpdate(loanHistory.getId());
+        List<RepaymentSchedule> allSchedules =
+                repaymentScheduleRepository.findAllByLoanHistory_IdOrderByDueDateAsc(loanHistory.getId());
+        List<RepaymentSchedule> targetSchedules = resolveRepaymentTargetSchedules(allSchedules, unsettledSchedules);
+
+        return targetSchedules.stream()
                 .map(schedule -> {
                     updateScheduleOverdue(schedule, loan);
                     return schedule.getRemainingPlannedOverdueInterest()
@@ -183,7 +197,36 @@ public class RepaymentService {
                             .add(schedule.getRemainingPlannedPrincipal());
                 })
                 .reduce(ZERO, BigDecimal::add)
-                .setScale(2, RoundingMode.HALF_UP);
+                .setScale(0, RoundingMode.DOWN);
+    }
+
+    private List<RepaymentSchedule> resolveRepaymentTargetSchedules(
+            List<RepaymentSchedule> allSchedules,
+            List<RepaymentSchedule> unsettledSchedules
+    ) {
+        if (allSchedules == null || allSchedules.isEmpty() || unsettledSchedules == null || unsettledSchedules.isEmpty()) {
+            return List.of();
+        }
+
+        LocalDate today = LocalDate.now();
+        LocalDate currentInstallmentBoundary = today.plusMonths(1);
+
+        RepaymentSchedule currentSchedule = allSchedules.stream()
+                .filter(schedule -> schedule.getDueDate() != null
+                        && !schedule.getDueDate().isBefore(today)
+                        && !schedule.getDueDate().isAfter(currentInstallmentBoundary))
+                .findFirst()
+                .orElse(null);
+
+        if (currentSchedule == null || Boolean.TRUE.equals(currentSchedule.getIsSettled())) {
+            return List.of();
+        }
+
+        LocalDate currentDueDate = currentSchedule.getDueDate();
+        return unsettledSchedules.stream()
+                .filter(schedule -> schedule.getDueDate() != null
+                        && !schedule.getDueDate().isAfter(currentDueDate))
+                .toList();
     }
 
     private void updateScheduleOverdue(RepaymentSchedule schedule, Loan loan) {
@@ -228,7 +271,7 @@ public class RepaymentService {
         BigDecimal remainingPrincipal = sumRemainingPrincipal(allSchedules);
         loanHistory.synchronizeRemainingPrincipal(remainingPrincipal);
         loanHistory.syncRepaymentStatus(nextSchedule != null ? nextSchedule.getDueDate() : null, hasOverdue);
-        return nullSafe(loanHistory.getRemainingPrincipal()).setScale(2, RoundingMode.HALF_UP);
+        return won(loanHistory.getRemainingPrincipal());
     }
 
     private int calculateOverdueDays(RepaymentSchedule schedule) {
@@ -250,7 +293,8 @@ public class RepaymentService {
                 .multiply(overdueRate)
                 .divide(new BigDecimal("100"), 10, RoundingMode.HALF_UP)
                 .multiply(BigDecimal.valueOf(overdueDays))
-                .divide(BigDecimal.valueOf(365), 2, RoundingMode.HALF_UP);
+                .divide(BigDecimal.valueOf(365), 10, RoundingMode.HALF_UP)
+                .setScale(0, RoundingMode.DOWN);
     }
 
     private BigDecimal sumRemainingPrincipal(List<RepaymentSchedule> schedules) {
@@ -258,7 +302,7 @@ public class RepaymentService {
                 .map(RepaymentSchedule::getRemainingPlannedPrincipal)
                 .map(this::nullSafe)
                 .reduce(ZERO, BigDecimal::add)
-                .setScale(2, RoundingMode.HALF_UP);
+                .setScale(0, RoundingMode.DOWN);
     }
 
     private BigDecimal nullSafe(BigDecimal value) {
@@ -280,16 +324,20 @@ public class RepaymentService {
         public static RepaymentResult notApplied(BigDecimal remainingPrincipal, BigDecimal requestedAmount) {
             return new RepaymentResult(
                     false,
-                    requestedAmount,
+                    won(requestedAmount),
                     ZERO,
                     ZERO,
                     ZERO,
                     ZERO,
-                    requestedAmount,
-                    remainingPrincipal,
+                    won(requestedAmount),
+                    won(remainingPrincipal),
                     null,
                     0
             );
         }
+    }
+
+    private static BigDecimal won(BigDecimal value) {
+        return WonAmount.floor(value);
     }
 }
