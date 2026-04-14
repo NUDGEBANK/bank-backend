@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.Optional;
 
 public interface DepositPaymentScheduleRepository extends JpaRepository<DepositPaymentSchedule, Long> {
+    List<DepositPaymentSchedule> findAllByDepositAccount_MemberIdOrderByDueDateAsc(Long memberId);
+
     List<DepositPaymentSchedule> findAllByDepositAccount_DepositAccountIdOrderByInstallmentNoAsc(Long depositAccountId);
 
     Optional<DepositPaymentSchedule> findFirstByDepositAccount_DepositAccountIdAndIsPaidFalseOrderByInstallmentNoAsc(Long depositAccountId);

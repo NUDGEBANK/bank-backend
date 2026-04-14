@@ -11,9 +11,18 @@ import com.nudgebank.bankbackend.credit.domain.CreditHistory;
 import com.nudgebank.bankbackend.credit.dto.CreditHistoryListResponse;
 import com.nudgebank.bankbackend.credit.dto.CreditScoreResponse;
 import com.nudgebank.bankbackend.credit.repository.CreditHistoryRepository;
+import com.nudgebank.bankbackend.deposit.domain.DepositAccount;
+import com.nudgebank.bankbackend.deposit.domain.DepositPaymentSchedule;
+import com.nudgebank.bankbackend.deposit.repository.DepositAccountRepository;
+import com.nudgebank.bankbackend.deposit.repository.DepositPaymentScheduleRepository;
+import com.nudgebank.bankbackend.loan.domain.LoanHistory;
+import com.nudgebank.bankbackend.loan.domain.RepaymentSchedule;
+import com.nudgebank.bankbackend.loan.repository.LoanHistoryRepository;
+import com.nudgebank.bankbackend.loan.repository.RepaymentScheduleRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
@@ -31,25 +40,44 @@ import org.springframework.transaction.annotation.Transactional;
 public class CreditScoreService {
   private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
   private static final Duration EVALUATION_COOLDOWN = Duration.ofMinutes(5);
+  private static final double BASE_SCORE = 500;
+  private static final String LOAN_STATUS_OVERDUE = "OVERDUE";
+  private static final String LOAN_STATUS_COMPLETED = "COMPLETED";
+  private static final String DEPOSIT_STATUS_ACTIVE = "ACTIVE";
+  private static final String DEPOSIT_STATUS_CLOSED = "CLOSED";
+  private static final String DEPOSIT_STATUS_EARLY_CLOSED = "EARLY_CLOSED";
+  private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
 
   private final MemberRepository memberRepository;
   private final AccountRepository accountRepository;
   private final CardRepository cardRepository;
   private final CardTransactionRepository cardTransactionRepository;
   private final CreditHistoryRepository creditHistoryRepository;
+  private final LoanHistoryRepository loanHistoryRepository;
+  private final RepaymentScheduleRepository repaymentScheduleRepository;
+  private final DepositAccountRepository depositAccountRepository;
+  private final DepositPaymentScheduleRepository depositPaymentScheduleRepository;
 
   public CreditScoreService(
       MemberRepository memberRepository,
       AccountRepository accountRepository,
       CardRepository cardRepository,
       CardTransactionRepository cardTransactionRepository,
-      CreditHistoryRepository creditHistoryRepository
+      CreditHistoryRepository creditHistoryRepository,
+      LoanHistoryRepository loanHistoryRepository,
+      RepaymentScheduleRepository repaymentScheduleRepository,
+      DepositAccountRepository depositAccountRepository,
+      DepositPaymentScheduleRepository depositPaymentScheduleRepository
   ) {
     this.memberRepository = memberRepository;
     this.accountRepository = accountRepository;
     this.cardRepository = cardRepository;
     this.cardTransactionRepository = cardTransactionRepository;
     this.creditHistoryRepository = creditHistoryRepository;
+    this.loanHistoryRepository = loanHistoryRepository;
+    this.repaymentScheduleRepository = repaymentScheduleRepository;
+    this.depositAccountRepository = depositAccountRepository;
+    this.depositPaymentScheduleRepository = depositPaymentScheduleRepository;
   }
 
   public CreditScoreResponse getLatest(Long memberId) {
@@ -118,7 +146,6 @@ public class CreditScoreService {
     return !elapsed.isNegative() && elapsed.compareTo(EVALUATION_COOLDOWN) < 0;
   }
 
-  // evaluateAndSave: credit_history 데이터 저장
   private CreditHistory evaluateAndSave(Long memberId) {
     List<Account> accounts = accountRepository.findAllByMemberId(memberId);
     List<Card> cards = accounts.stream()
@@ -132,9 +159,26 @@ public class CreditScoreService {
         .sorted(Comparator.comparing(CardTransaction::getTransactionDatetime).reversed())
         .toList();
 
-    int score = calculateScore(accounts, cards, transactions);
+    List<LoanHistory> loanHistories = loanHistoryRepository.findAllByMember_MemberIdOrderByCreatedAtDesc(memberId);
+    List<RepaymentSchedule> repaymentSchedules =
+        repaymentScheduleRepository.findAllByLoanHistory_Member_MemberIdOrderByDueDateAsc(memberId);
+    List<DepositAccount> depositAccounts = depositAccountRepository.findAllByMemberId(memberId);
+    List<DepositPaymentSchedule> depositSchedules =
+        depositPaymentScheduleRepository.findAllByDepositAccount_MemberIdOrderByDueDateAsc(memberId);
+
+    CreditMetrics metrics = buildCreditMetrics(
+        accounts,
+        cards,
+        transactions,
+        loanHistories,
+        repaymentSchedules,
+        depositAccounts,
+        depositSchedules
+    );
+
+    int score = calculateScore(metrics);
     String grade = getGrade(score);
-    String summary = buildSummary(accounts, transactions);
+    String summary = buildSummary(metrics);
 
     CreditHistory creditHistory = CreditHistory.create(
         memberId,
@@ -147,15 +191,19 @@ public class CreditScoreService {
     return creditHistoryRepository.save(creditHistory);
   }
 
-  private int calculateScore(List<Account> accounts, List<Card> cards, List<CardTransaction> transactions) {
-    double score = 500;
-
-    BigDecimal totalBalance = accounts.stream()
-        .map(Account::getBalance)
-        .filter(balance -> balance != null)
-        .reduce(BigDecimal.ZERO, BigDecimal::add);
-    double totalBalanceValue = totalBalance.doubleValue();
-    double assetScore = calculateAssetScore(totalBalanceValue);
+  private CreditMetrics buildCreditMetrics(
+      List<Account> accounts,
+      List<Card> cards,
+      List<CardTransaction> transactions,
+      List<LoanHistory> loanHistories,
+      List<RepaymentSchedule> repaymentSchedules,
+      List<DepositAccount> depositAccounts,
+      List<DepositPaymentSchedule> depositSchedules
+  ) {
+    BigDecimal accountBalance = sumAccounts(accounts);
+    BigDecimal depositBalance = sumDepositBalance(depositAccounts);
+    BigDecimal totalLoanRemaining = sumRemainingPrincipal(loanHistories);
+    BigDecimal netAsset = scale(accountBalance.add(depositBalance).subtract(totalLoanRemaining)).max(ZERO);
 
     Map<YearMonth, BigDecimal> monthlyTotals = buildMonthlyTotals(transactions, 3);
     BigDecimal averageMonthly = average(monthlyTotals.values().stream().toList());
@@ -166,20 +214,49 @@ public class CreditScoreService {
     int recentTransactionCount = monthlyTransactionCounts.values().stream()
         .mapToInt(Integer::intValue)
         .sum();
-    double averageMonthlyValue = averageMonthly.doubleValue();
-
-    score += adjustAssetScoreByActivity(assetScore, activeMonths, recentTransactionCount);
-    score += scaleScore(activeMonths, 0, 3, 95);
-    score += calculateSpendingBurdenScore(totalBalanceValue, averageMonthlyValue);
-
     BigDecimal volatility = calculateVolatility(monthlyTotals, averageMonthly);
-    score += calculateVolatilityScore(monthlyTotals.isEmpty(), volatility.doubleValue());
+    long daysSinceLatestTransaction = calculateDaysSinceLatestTransaction(transactions);
 
-    score += scaleScore(recentTransactionCount, 0, 30, 60);
-    score += calculateRecencyScore(transactions);
+    LoanMetrics loanMetrics = buildLoanMetrics(loanHistories, repaymentSchedules);
+    DepositMetrics depositMetrics = buildDepositMetrics(depositAccounts, depositSchedules);
 
-    if (activeMonths == 0 || recentTransactionCount < 3) {
-      score -= 30;
+    return new CreditMetrics(
+        accountBalance,
+        depositBalance,
+        totalLoanRemaining,
+        netAsset,
+        averageMonthly,
+        monthlyTotals,
+        activeMonths,
+        recentTransactionCount,
+        volatility,
+        daysSinceLatestTransaction,
+        cards.isEmpty(),
+        transactions.isEmpty(),
+        loanMetrics,
+        depositMetrics
+    );
+  }
+
+  private int calculateScore(CreditMetrics metrics) {
+    double score = BASE_SCORE;
+
+    score += calculateNetAssetScore(metrics.netAsset().doubleValue());
+    score += scaleScore(metrics.activeMonths(), 0, 3, 55);
+    score += calculateSpendingBurdenScore(metrics.netAsset().doubleValue(), metrics.averageMonthlySpending().doubleValue());
+    score += calculateVolatilityScore(metrics.noTransactions(), metrics.volatility().doubleValue());
+    score += scaleScore(metrics.recentTransactionCount(), 0, 30, 35);
+    score += calculateRecencyScore(metrics.daysSinceLatestTransaction(), metrics.noTransactions());
+    score += calculateLoanBurdenScore(
+        metrics.totalLoanRemaining().doubleValue(),
+        metrics.accountBalance().add(metrics.depositBalance()).doubleValue()
+    );
+    score += calculateLoanRepaymentScore(metrics.loanMetrics());
+    score += calculateDepositHabitScore(metrics.depositMetrics());
+    score += calculateInitialProfileScore(metrics);
+
+    if (metrics.activeMonths() == 0 || metrics.recentTransactionCount() < 3) {
+      score -= 20;
     }
 
     int roundedScore = (int) Math.round(score);
@@ -196,7 +273,7 @@ public class CreditScoreService {
       }
 
       YearMonth yearMonth = YearMonth.from(transaction.getTransactionDatetime());
-      monthlyTotals.merge(yearMonth, transaction.getAmount(), BigDecimal::add);
+      monthlyTotals.merge(yearMonth, nullSafe(transaction.getAmount()), BigDecimal::add);
     }
 
     return monthlyTotals;
@@ -204,21 +281,21 @@ public class CreditScoreService {
 
   private BigDecimal average(List<BigDecimal> values) {
     if (values.isEmpty()) {
-      return BigDecimal.ZERO;
+      return ZERO;
     }
 
-    BigDecimal sum = values.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
-    return sum.divide(BigDecimal.valueOf(values.size()), 2, RoundingMode.HALF_UP);
+    BigDecimal sum = values.stream().reduce(ZERO, BigDecimal::add);
+    return scale(sum.divide(BigDecimal.valueOf(values.size()), 2, RoundingMode.HALF_UP));
   }
 
   private BigDecimal calculateVolatility(Map<YearMonth, BigDecimal> monthlyTotals, BigDecimal averageMonthly) {
     if (monthlyTotals.size() < 2 || averageMonthly.compareTo(BigDecimal.ZERO) == 0) {
-      return BigDecimal.ZERO;
+      return ZERO;
     }
 
-    BigDecimal max = monthlyTotals.values().stream().max(BigDecimal::compareTo).orElse(BigDecimal.ZERO);
-    BigDecimal min = monthlyTotals.values().stream().min(BigDecimal::compareTo).orElse(BigDecimal.ZERO);
-    return max.subtract(min).divide(averageMonthly, 2, RoundingMode.HALF_UP);
+    BigDecimal max = monthlyTotals.values().stream().max(BigDecimal::compareTo).orElse(ZERO);
+    BigDecimal min = monthlyTotals.values().stream().min(BigDecimal::compareTo).orElse(ZERO);
+    return scale(max.subtract(min).divide(averageMonthly, 2, RoundingMode.HALF_UP));
   }
 
   private Map<YearMonth, Integer> buildMonthlyTransactionCounts(List<CardTransaction> transactions, int months) {
@@ -237,106 +314,166 @@ public class CreditScoreService {
     return monthlyCounts;
   }
 
-  private double calculateAssetScore(double totalBalanceValue) {
-    if (totalBalanceValue <= 0) {
+  private double calculateNetAssetScore(double netAssetValue) {
+    if (netAssetValue <= 0) {
       return 0;
     }
-    if (totalBalanceValue <= 10_000_000) {
-      return scaleScore(totalBalanceValue, 0, 10_000_000, 55);
+    if (netAssetValue <= 5_000_000) {
+      return scaleScore(netAssetValue, 0, 5_000_000, 25);
     }
-    if (totalBalanceValue <= 30_000_000) {
-      return 55 + scaleScore(totalBalanceValue - 10_000_000, 0, 20_000_000, 35);
+    if (netAssetValue <= 20_000_000) {
+      return 25 + scaleScore(netAssetValue - 5_000_000, 0, 15_000_000, 25);
     }
-    if (totalBalanceValue <= 50_000_000) {
-      return 90 + scaleScore(totalBalanceValue - 30_000_000, 0, 20_000_000, 20);
+    if (netAssetValue <= 50_000_000) {
+      return 50 + scaleScore(netAssetValue - 20_000_000, 0, 30_000_000, 20);
     }
-    return 110;
+    return 70;
   }
 
-  private double adjustAssetScoreByActivity(double assetScore, int activeMonths, int recentTransactionCount) {
-    if (assetScore <= 0) {
-      return 0;
-    }
-    if (activeMonths >= 3 && recentTransactionCount >= 10) {
-      return assetScore;
-    }
-    if (activeMonths >= 2 && recentTransactionCount >= 5) {
-      return assetScore * 0.8;
-    }
-    if (activeMonths >= 1 && recentTransactionCount >= 3) {
-      return assetScore * 0.6;
-    }
-    return assetScore * 0.35;
-  }
-
-  private double calculateSpendingBurdenScore(double totalBalanceValue, double averageMonthlyValue) {
+  private double calculateSpendingBurdenScore(double netAssetValue, double averageMonthlyValue) {
     if (averageMonthlyValue <= 0) {
       return 0;
     }
-    double referenceAsset = Math.max(totalBalanceValue, 300_000);
+
+    double referenceAsset = Math.max(netAssetValue, 300_000);
     double burdenRatio = averageMonthlyValue / referenceAsset;
 
     if (burdenRatio <= 0.15) {
-      return 55;
+      return 45;
     }
     if (burdenRatio <= 0.30) {
-      return 55 - scaleScore(burdenRatio - 0.15, 0, 0.15, 15);
+      return 45 - scaleScore(burdenRatio - 0.15, 0, 0.15, 20);
     }
     if (burdenRatio <= 0.60) {
-      return 40 - scaleScore(burdenRatio - 0.30, 0, 0.30, 25);
+      return 25 - scaleScore(burdenRatio - 0.30, 0, 0.30, 30);
     }
     if (burdenRatio <= 1.00) {
-      return 15 - scaleScore(burdenRatio - 0.60, 0, 0.40, 35);
+      return -5 - scaleScore(burdenRatio - 0.60, 0, 0.40, 20);
     }
-    return -20 - scaleScore(Math.min(burdenRatio - 1.00, 1.50), 0, 1.50, 30);
+    return -25 - scaleScore(Math.min(burdenRatio - 1.00, 1.50), 0, 1.50, 10);
   }
 
   private double calculateVolatilityScore(boolean noTransactions, double volatility) {
     if (noTransactions) {
       return 0;
     }
+    if (volatility <= 0) {
+      return 0;
+    }
     if (volatility <= 0.20) {
-      return 110;
+      return 60;
     }
     if (volatility <= 0.40) {
-      return 110 - scaleScore(volatility - 0.20, 0, 0.20, 40);
+      return 60 - scaleScore(volatility - 0.20, 0, 0.20, 20);
     }
     if (volatility <= 0.80) {
-      return 70 - scaleScore(volatility - 0.40, 0, 0.40, 50);
+      return 40 - scaleScore(volatility - 0.40, 0, 0.40, 40);
     }
-    return -scaleScore(Math.min(volatility - 0.80, 1.20), 0, 1.20, 45);
+    return -scaleScore(Math.min(volatility - 0.80, 1.20), 0, 1.20, 30);
   }
 
-  private double calculateRecencyScore(List<CardTransaction> transactions) {
-    if (transactions.isEmpty()) {
-      return -40;
+  private double calculateRecencyScore(long daysSinceLatest, boolean noTransactions) {
+    if (noTransactions || daysSinceLatest < 0) {
+      return -25;
     }
-
-    OffsetDateTime latestTransactionAt = transactions.stream()
-        .map(CardTransaction::getTransactionDatetime)
-        .filter(transactionDatetime -> transactionDatetime != null)
-        .max(Comparator.naturalOrder())
-        .orElse(null);
-
-    if (latestTransactionAt == null) {
-      return -40;
-    }
-
-    long daysSinceLatest = java.time.Duration.between(latestTransactionAt, OffsetDateTime.now()).toDays();
-
     if (daysSinceLatest <= 14) {
-      return 45;
+      return 25;
     }
     if (daysSinceLatest <= 30) {
-      return 30;
+      return 15;
     }
     if (daysSinceLatest <= 60) {
-      return 10;
+      return 0;
     }
     if (daysSinceLatest <= 90) {
       return -10;
     }
-    return -40;
+    return -25;
+  }
+
+  private double calculateLoanBurdenScore(double remainingPrincipalValue, double grossAssetValue) {
+    if (remainingPrincipalValue <= 0) {
+      return 5;
+    }
+
+    double referenceAsset = Math.max(grossAssetValue, 500_000);
+    double debtRatio = remainingPrincipalValue / referenceAsset;
+
+    if (debtRatio <= 0.30) {
+      return 65 - scaleScore(debtRatio, 0, 0.30, 20);
+    }
+    if (debtRatio <= 1.00) {
+      return 45 - scaleScore(debtRatio - 0.30, 0, 0.70, 45);
+    }
+    if (debtRatio <= 2.00) {
+      return -scaleScore(debtRatio - 1.00, 0, 1.00, 40);
+    }
+    return -40 - scaleScore(Math.min(debtRatio - 2.00, 2.00), 0, 2.00, 30);
+  }
+
+  private double calculateLoanRepaymentScore(LoanMetrics metrics) {
+    if (metrics.overdueLoanCount() > 0) {
+      return -80;
+    }
+    if (metrics.dueScheduleCount() <= 0) {
+      return metrics.loanCount() > 0 ? 10 : 0;
+    }
+
+    double overdueRatio = metrics.overdueDueCount() / (double) metrics.dueScheduleCount();
+    if (metrics.overdueDueCount() == 0 && metrics.maxOverdueDays() == 0) {
+      return 55;
+    }
+    if (overdueRatio <= 0.10 && metrics.maxOverdueDays() <= 7) {
+      return 20;
+    }
+    if (overdueRatio <= 0.25 && metrics.maxOverdueDays() <= 30) {
+      return -10;
+    }
+    if (overdueRatio <= 0.50) {
+      return -40;
+    }
+    return -80;
+  }
+
+  private double calculateDepositHabitScore(DepositMetrics metrics) {
+    if (metrics.depositAccountCount() == 0) {
+      return 0;
+    }
+
+    double score = 0;
+    if (metrics.activeDepositCount() > 0) {
+      score += 10;
+    }
+    if (metrics.maturityClosedCount() > 0) {
+      score += 15;
+    }
+    if (metrics.dueScheduleCount() > 0) {
+      double paidRatio = metrics.paidDueCount() / (double) metrics.dueScheduleCount();
+      if (paidRatio >= 0.95) {
+        score += 15;
+      } else if (paidRatio >= 0.75) {
+        score += 10;
+      } else if (paidRatio >= 0.50) {
+        score += 5;
+      } else {
+        score -= 10;
+      }
+    }
+
+    score -= Math.min(metrics.earlyClosedCount() * 10.0, 20.0);
+    return Math.max(-20, Math.min(40, score));
+  }
+
+  private double calculateInitialProfileScore(CreditMetrics metrics) {
+    boolean noAccounts = metrics.accountBalance().compareTo(BigDecimal.ZERO) <= 0;
+    boolean noLoans = metrics.loanMetrics().loanCount() == 0;
+    boolean noDeposits = metrics.depositMetrics().depositAccountCount() == 0;
+    boolean noCardsOrTransactions = metrics.noCards() || metrics.noTransactions();
+
+    if (noAccounts && noLoans && noDeposits && noCardsOrTransactions) {
+      return -40;
+    }
+    return 0;
   }
 
   private double scaleScore(double value, double minValue, double maxValue, double maxScore) {
@@ -349,32 +486,39 @@ public class CreditScoreService {
     return ((value - minValue) / (maxValue - minValue)) * maxScore;
   }
 
-  private String buildSummary(List<Account> accounts, List<CardTransaction> transactions) {
-    BigDecimal totalBalance = accounts.stream()
-        .map(Account::getBalance)
-        .filter(balance -> balance != null)
-        .reduce(BigDecimal.ZERO, BigDecimal::add);
-    Map<YearMonth, BigDecimal> monthlyTotals = buildMonthlyTotals(transactions, 3);
-    BigDecimal averageMonthly = average(monthlyTotals.values().stream().toList());
-    BigDecimal volatility = calculateVolatility(monthlyTotals, averageMonthly);
-
+  private String buildSummary(CreditMetrics metrics) {
     List<String> sentences = new ArrayList<>();
-    sentences.add(accounts.isEmpty()
-        ? "연결된 계좌 정보가 적어 보수적으로 평가했습니다."
-        : "연결된 계좌와 카드 거래 흐름을 함께 반영했습니다.");
 
-    if (totalBalance.compareTo(new BigDecimal("1000000")) >= 0) {
-      sentences.add("현재 계좌 잔액 규모는 비교적 안정적인 편입니다.");
+    if (metrics.netAsset().compareTo(new BigDecimal("1000000")) >= 0) {
+      sentences.add("순자산 기준 자금 여력은 비교적 안정적인 편입니다.");
     } else {
-      sentences.add("현재 계좌 잔액 규모는 아직 크지 않은 편입니다.");
+      sentences.add("순자산 규모는 아직 크지 않아 보수적으로 반영했습니다.");
     }
 
-    if (transactions.isEmpty()) {
-      sentences.add("최근 카드 거래 데이터가 적어 거래 안정성 판단은 제한적으로 반영했습니다.");
-    } else if (volatility.compareTo(new BigDecimal("0.50")) <= 0) {
-      sentences.add("최근 3개월 소비 변동성이 낮아 거래 흐름은 비교적 안정적입니다.");
+    if (metrics.loanMetrics().loanCount() == 0) {
+      sentences.add("현재 대출 잔액이 없어 부채 부담은 낮은 편으로 반영했습니다.");
+    } else if (metrics.loanMetrics().overdueLoanCount() > 0 || metrics.loanMetrics().overdueDueCount() > 0) {
+      sentences.add("대출 상환 일정 중 연체 이력이 확인되어 신용 점수에 보수적으로 반영했습니다.");
     } else {
-      sentences.add("최근 3개월 소비 변동성이 커서 보수적으로 반영했습니다.");
+      sentences.add("대출 잔여원금과 상환 일정은 전반적으로 안정적으로 반영했습니다.");
+    }
+
+    if (metrics.depositMetrics().depositAccountCount() == 0) {
+      sentences.add("예적금 이력이 없어 저축 습관 평가는 중립적으로 반영했습니다.");
+    } else if (metrics.depositMetrics().maturityClosedCount() > 0) {
+      sentences.add("만기 유지한 예적금 이력이 있어 금융 습관 안정성에 가산점을 반영했습니다.");
+    } else if (metrics.depositMetrics().earlyClosedCount() > 0) {
+      sentences.add("중도해지 이력이 있어 예적금 유지 성실도는 보수적으로 반영했습니다.");
+    } else {
+      sentences.add("예적금 유지 및 납입 흐름이 확인되어 저축 습관을 함께 반영했습니다.");
+    }
+
+    if (metrics.noTransactions()) {
+      sentences.add("최근 카드 거래 데이터가 적어 소비 안정성 평가는 제한적으로 반영했습니다.");
+    } else if (metrics.volatility().compareTo(new BigDecimal("0.50")) <= 0) {
+      sentences.add("최근 3개월 소비 변동성은 비교적 안정적인 편입니다.");
+    } else {
+      sentences.add("최근 3개월 소비 변동성이 커서 소비 흐름은 보수적으로 반영했습니다.");
     }
 
     return String.join(" ", sentences);
@@ -407,14 +551,19 @@ public class CreditScoreService {
 
     List<CreditScoreResponse.CreditFactorDto> factors = List.of(
         new CreditScoreResponse.CreditFactorDto(
-            "자금 여력",
+            "순자산",
             creditScore >= 800 ? "양호" : "추가 확인 필요",
-            "현재 계좌 잔액과 카드 거래 흐름을 바탕으로 내부 기준으로 계산한 결과입니다."
+            "입출금 계좌와 예적금 잔액에서 대출 잔여원금을 차감한 순자산 기준을 반영합니다."
         ),
         new CreditScoreResponse.CreditFactorDto(
-            "소비 흐름",
-            creditScore >= 750 ? "안정적" : "변동성 있음",
-            "최근 3개월 소비 흐름과 최근 거래일을 함께 반영합니다."
+            "대출 상환",
+            creditScore >= 750 ? "안정적" : "보수적 반영",
+            "대출 잔여원금 규모와 상환 일정의 연체 여부를 함께 반영합니다."
+        ),
+        new CreditScoreResponse.CreditFactorDto(
+            "저축·소비 습관",
+            creditScore >= 700 ? "참고 가능" : "추가 관찰 필요",
+            "최근 3개월 소비 흐름과 예적금 유지·납입 성실도를 함께 반영합니다."
         ),
         new CreditScoreResponse.CreditFactorDto(
             "참고 한도",
@@ -429,14 +578,14 @@ public class CreditScoreService {
             "소비연동 자동상환 대출",
             "연 3.5%",
             "최대 5,000만원",
-            "현재 내부 평가 점수와 최근 거래 흐름을 기준으로 예시 추천한 상품입니다."
+            "현재 내부 평가 점수와 최근 상환·거래 흐름을 기준으로 예시 추천한 상품입니다."
         ),
         new CreditScoreResponse.RecommendedLoanDto(
             "youth-loan",
             "청년 주거안정 대출",
             "연 2.5%",
             "최대 3,000만원",
-            "현재 자금 여력과 소비 흐름이 비교적 안정적인 구간으로 분석된 예시입니다."
+            "순자산과 상환 안정성, 예적금 유지 흐름을 함께 반영한 예시 추천입니다."
         )
     );
 
@@ -460,5 +609,157 @@ public class CreditScoreService {
       return man + "만원";
     }
     return value + "원";
+  }
+
+  private BigDecimal sumAccounts(List<Account> accounts) {
+    return scale(accounts.stream()
+        .map(Account::getBalance)
+        .filter(balance -> balance != null)
+        .reduce(ZERO, BigDecimal::add));
+  }
+
+  private BigDecimal sumDepositBalance(List<DepositAccount> depositAccounts) {
+    return scale(depositAccounts.stream()
+        .map(DepositAccount::getCurrentBalance)
+        .filter(balance -> balance != null)
+        .reduce(ZERO, BigDecimal::add));
+  }
+
+  private BigDecimal sumRemainingPrincipal(List<LoanHistory> loanHistories) {
+    return scale(loanHistories.stream()
+        .map(LoanHistory::getRemainingPrincipal)
+        .filter(balance -> balance != null)
+        .reduce(ZERO, BigDecimal::add));
+  }
+
+  private long calculateDaysSinceLatestTransaction(List<CardTransaction> transactions) {
+    OffsetDateTime latestTransactionAt = transactions.stream()
+        .map(CardTransaction::getTransactionDatetime)
+        .filter(transactionDatetime -> transactionDatetime != null)
+        .max(Comparator.naturalOrder())
+        .orElse(null);
+
+    if (latestTransactionAt == null) {
+      return -1;
+    }
+    return Duration.between(latestTransactionAt, OffsetDateTime.now()).toDays();
+  }
+
+  private LoanMetrics buildLoanMetrics(List<LoanHistory> loanHistories, List<RepaymentSchedule> repaymentSchedules) {
+    LocalDate today = LocalDate.now();
+    int loanCount = (int) loanHistories.stream()
+        .filter(history -> nullSafe(history.getRemainingPrincipal()).compareTo(BigDecimal.ZERO) > 0)
+        .count();
+    int overdueLoanCount = (int) loanHistories.stream()
+        .filter(history -> LOAN_STATUS_OVERDUE.equalsIgnoreCase(history.getStatus()))
+        .count();
+
+    List<RepaymentSchedule> dueSchedules = repaymentSchedules.stream()
+        .filter(schedule -> schedule.getDueDate() != null && !schedule.getDueDate().isAfter(today))
+        .toList();
+
+    int settledDueCount = (int) dueSchedules.stream()
+        .filter(schedule -> Boolean.TRUE.equals(schedule.getIsSettled()))
+        .count();
+    int overdueDueCount = (int) dueSchedules.stream()
+        .filter(schedule -> !Boolean.TRUE.equals(schedule.getIsSettled()) || resolveOverdueDays(schedule) > 0)
+        .count();
+    int maxOverdueDays = dueSchedules.stream()
+        .mapToInt(this::resolveOverdueDays)
+        .max()
+        .orElse(0);
+
+    return new LoanMetrics(loanCount, overdueLoanCount, dueSchedules.size(), settledDueCount, overdueDueCount, maxOverdueDays);
+  }
+
+  private DepositMetrics buildDepositMetrics(
+      List<DepositAccount> depositAccounts,
+      List<DepositPaymentSchedule> depositSchedules
+  ) {
+    LocalDate today = LocalDate.now();
+    int activeDepositCount = (int) depositAccounts.stream()
+        .filter(account -> DEPOSIT_STATUS_ACTIVE.equalsIgnoreCase(account.getStatus()))
+        .count();
+    int maturityClosedCount = (int) depositAccounts.stream()
+        .filter(account -> DEPOSIT_STATUS_CLOSED.equalsIgnoreCase(account.getStatus()))
+        .count();
+    int earlyClosedCount = (int) depositAccounts.stream()
+        .filter(account -> DEPOSIT_STATUS_EARLY_CLOSED.equalsIgnoreCase(account.getStatus()))
+        .count();
+
+    List<DepositPaymentSchedule> dueSchedules = depositSchedules.stream()
+        .filter(schedule -> schedule.getDueDate() != null && !schedule.getDueDate().isAfter(today))
+        .toList();
+    int paidDueCount = (int) dueSchedules.stream()
+        .filter(schedule -> Boolean.TRUE.equals(schedule.getIsPaid()))
+        .count();
+
+    return new DepositMetrics(
+        depositAccounts.size(),
+        activeDepositCount,
+        maturityClosedCount,
+        earlyClosedCount,
+        dueSchedules.size(),
+        paidDueCount
+    );
+  }
+
+  private int resolveOverdueDays(RepaymentSchedule schedule) {
+    if (schedule.getOverdueDays() != null) {
+      return Math.max(schedule.getOverdueDays(), 0);
+    }
+    if (!Boolean.TRUE.equals(schedule.getIsSettled()) && schedule.getDueDate() != null && schedule.getDueDate().isBefore(LocalDate.now())) {
+      return (int) Duration.between(
+          schedule.getDueDate().atStartOfDay(),
+          LocalDate.now().atStartOfDay()
+      ).toDays();
+    }
+    return 0;
+  }
+
+  private BigDecimal nullSafe(BigDecimal value) {
+    return value != null ? scale(value) : ZERO;
+  }
+
+  private BigDecimal scale(BigDecimal value) {
+    return value == null ? ZERO : value.setScale(2, RoundingMode.HALF_UP);
+  }
+
+  private record CreditMetrics(
+      BigDecimal accountBalance,
+      BigDecimal depositBalance,
+      BigDecimal totalLoanRemaining,
+      BigDecimal netAsset,
+      BigDecimal averageMonthlySpending,
+      Map<YearMonth, BigDecimal> monthlyTotals,
+      int activeMonths,
+      int recentTransactionCount,
+      BigDecimal volatility,
+      long daysSinceLatestTransaction,
+      boolean noCards,
+      boolean noTransactions,
+      LoanMetrics loanMetrics,
+      DepositMetrics depositMetrics
+  ) {
+  }
+
+  private record LoanMetrics(
+      int loanCount,
+      int overdueLoanCount,
+      int dueScheduleCount,
+      int settledDueCount,
+      int overdueDueCount,
+      int maxOverdueDays
+  ) {
+  }
+
+  private record DepositMetrics(
+      int depositAccountCount,
+      int activeDepositCount,
+      int maturityClosedCount,
+      int earlyClosedCount,
+      int dueScheduleCount,
+      int paidDueCount
+  ) {
   }
 }
