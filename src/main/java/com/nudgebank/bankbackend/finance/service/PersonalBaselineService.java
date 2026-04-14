@@ -16,6 +16,7 @@ import com.nudgebank.bankbackend.finance.repository.ConsumerBaselineRepository;
 import com.nudgebank.bankbackend.finance.repository.ConsumerMonthlyAnalysisRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -208,7 +209,25 @@ public class PersonalBaselineService {
                 analysisYearMonth,
                 now
         );
-        return consumerBaselineRepository.save(created);
+        try {
+            return consumerBaselineRepository.saveAndFlush(created);
+        } catch (DataIntegrityViolationException exception) {
+            ConsumerBaseline concurrentBaseline = consumerBaselineRepository
+                    .findByMemberIdAndAnalysisYearMonth(memberId, analysisYearMonth)
+                    .orElseThrow(() -> exception);
+            concurrentBaseline.update(
+                    personal.avgSpending(),
+                    personal.essentialRatio(),
+                    personal.normalRatio(),
+                    personal.discretionaryRatio(),
+                    personal.riskRatio(),
+                    personal.volatility(),
+                    volatilityIndex,
+                    analysisYearMonth,
+                    now
+            );
+            return concurrentBaseline;
+        }
     }
 
     private void saveOrUpdateConsumerMonthlyAnalysis(Long memberId, LocalDate today, ConsumerBaseline baseline) {
@@ -293,22 +312,39 @@ public class PersonalBaselineService {
             return;
         }
 
-        consumerMonthlyAnalysisRepository.save(
-                ConsumerMonthlyAnalysis.create(
-                        memberId,
-                        analysisYearMonth,
-                        currentMonthSpending,
-                        sameDayAvgSpending,
-                        spendingDiffAmount,
-                        spendingStatus,
-                        totalTransactionsCount,
-                        essentialTransactionsCount,
-                        discretionaryTransactionsCount,
-                        largestSpendingCategoryId,
-                        largestSpendingAmount,
-                        now
-                )
+        ConsumerMonthlyAnalysis created = ConsumerMonthlyAnalysis.create(
+                memberId,
+                analysisYearMonth,
+                currentMonthSpending,
+                sameDayAvgSpending,
+                spendingDiffAmount,
+                spendingStatus,
+                totalTransactionsCount,
+                essentialTransactionsCount,
+                discretionaryTransactionsCount,
+                largestSpendingCategoryId,
+                largestSpendingAmount,
+                now
         );
+        try {
+            consumerMonthlyAnalysisRepository.saveAndFlush(created);
+        } catch (DataIntegrityViolationException exception) {
+            ConsumerMonthlyAnalysis concurrentAnalysis = consumerMonthlyAnalysisRepository
+                    .findByMemberIdAndAnalysisYearMonth(memberId, analysisYearMonth)
+                    .orElseThrow(() -> exception);
+            concurrentAnalysis.update(
+                    currentMonthSpending,
+                    sameDayAvgSpending,
+                    spendingDiffAmount,
+                    spendingStatus,
+                    totalTransactionsCount,
+                    essentialTransactionsCount,
+                    discretionaryTransactionsCount,
+                    largestSpendingCategoryId,
+                    largestSpendingAmount,
+                    now
+            );
+        }
     }
 
     private FinalBaselineResponse buildAgeOnlyResponse(Long memberId, int age, AgeGroupBaseline baseline, FinancialStatusResponse financialStatusResponse) {
