@@ -2,14 +2,14 @@ package com.nudgebank.bankbackend.finance.controller;
 
 import com.nudgebank.bankbackend.auth.security.SecurityUtil;
 import com.nudgebank.bankbackend.finance.dto.AutoRepaymentDecisionResponse;
+import com.nudgebank.bankbackend.finance.dto.AutoRepaymentRequest;
+import com.nudgebank.bankbackend.finance.service.AutoRepaymentExecutionService;
 import com.nudgebank.bankbackend.finance.service.AutoRepaymentPolicyService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestController
@@ -18,6 +18,7 @@ import org.springframework.web.server.ResponseStatusException;
 public class AutoRepaymentController {
 
     private final AutoRepaymentPolicyService autoRepaymentPolicyService;
+    private final AutoRepaymentExecutionService autoRepaymentExecutionService;
 
     @GetMapping("/me/{transactionId}")
     public AutoRepaymentDecisionResponse getAutoRepaymentDecision(
@@ -30,4 +31,13 @@ public class AutoRepaymentController {
         }
         return autoRepaymentPolicyService.decideAutoRepayment(memberId, transactionId);
     }
+
+    @PostMapping("/execute")
+    public ResponseEntity<Void> receivePaymentSignal(@RequestBody AutoRepaymentRequest signal) {
+
+        autoRepaymentExecutionService.executeAfterPaymentReal(signal.getMemberId(), signal.getCardTransaction());
+
+        return ResponseEntity.accepted().build();
+    }
+
 }

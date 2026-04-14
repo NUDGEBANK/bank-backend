@@ -42,11 +42,17 @@ public class RepaymentSchedule {
     @Column(name = "planned_interest", precision = 15, scale = 2)
     private BigDecimal plannedInterest;
 
+    @Column(name = "planned_overdue_interest", precision = 15, scale = 2)
+    private BigDecimal plannedOverdueInterest;
+
     @Column(name = "paid_principal", precision = 15, scale = 2)
     private BigDecimal paidPrincipal;
 
     @Column(name = "paid_interest", precision = 15, scale = 2)
     private BigDecimal paidInterest;
+
+    @Column(name = "paid_overdue_interest", precision = 15, scale = 2)
+    private BigDecimal paidOverdueInterest;
 
     @Column(name = "is_settled")
     private Boolean isSettled;
@@ -65,8 +71,10 @@ public class RepaymentSchedule {
         schedule.dueDate = dueDate;
         schedule.plannedPrincipal = plannedPrincipal;
         schedule.plannedInterest = plannedInterest;
+        schedule.plannedOverdueInterest = BigDecimal.ZERO;
         schedule.paidPrincipal = BigDecimal.ZERO;
         schedule.paidInterest = BigDecimal.ZERO;
+        schedule.paidOverdueInterest = BigDecimal.ZERO;
         schedule.isSettled = false;
         schedule.overdueDays = 0;
         return schedule;
@@ -81,12 +89,20 @@ public class RepaymentSchedule {
         this.plannedInterest = plannedInterest;
     }
 
+    public void updatePlannedOverdueInterest(BigDecimal plannedOverdueInterest) {
+        this.plannedOverdueInterest = nullSafe(plannedOverdueInterest);
+    }
+
     public BigDecimal getRemainingPlannedPrincipal() {
         return nullSafe(plannedPrincipal).subtract(nullSafe(paidPrincipal)).max(BigDecimal.ZERO);
     }
 
     public BigDecimal getRemainingPlannedInterest() {
         return nullSafe(plannedInterest).subtract(nullSafe(paidInterest)).max(BigDecimal.ZERO);
+    }
+
+    public BigDecimal getRemainingPlannedOverdueInterest() {
+        return nullSafe(plannedOverdueInterest).subtract(nullSafe(paidOverdueInterest)).max(BigDecimal.ZERO);
     }
 
     public void addPaidPrincipal(BigDecimal amount) {
@@ -103,6 +119,14 @@ public class RepaymentSchedule {
         }
 
         this.paidInterest = nullSafe(this.paidInterest).add(amount);
+    }
+
+    public void addPaidOverdueInterest(BigDecimal amount) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+
+        this.paidOverdueInterest = nullSafe(this.paidOverdueInterest).add(amount);
     }
 
     public boolean normalizePaidAmounts() {

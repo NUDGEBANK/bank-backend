@@ -78,7 +78,7 @@ public class CardPaymentService {
         CardTransaction saved = cardTransactionRepository.save(transaction);
         AutoRepaymentExecutionResult autoRepaymentResult;
         try {
-            autoRepaymentResult = autoRepaymentExecutionService.executeAfterPayment(account.getMemberId(), saved);
+            autoRepaymentResult = autoRepaymentExecutionService.executeAfterPayment(account.getMemberId(), saved.getTransactionId());
         } catch (RuntimeException exception) {
             autoRepaymentResult = AutoRepaymentExecutionResult.failed();
         }
