@@ -28,6 +28,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
@@ -177,6 +178,7 @@ public class DepositAccountService {
         DepositPaymentSchedule schedule = depositPaymentScheduleRepository
             .findFirstByDepositAccount_DepositAccountIdAndIsPaidFalseOrderByInstallmentNoAsc(depositAccountId)
             .orElseThrow(() -> new IllegalArgumentException("납입할 회차가 없습니다."));
+        validateManualDepositSchedule(schedule);
 
         BigDecimal amount = scale(request.amount());
         if (amount.compareTo(scale(schedule.getPlannedAmount())) != 0) {
@@ -319,6 +321,14 @@ public class DepositAccountService {
         depositPaymentScheduleRepository.saveAll(schedules);
     }
 
+    private void validateManualDepositSchedule(DepositPaymentSchedule schedule) {
+        YearMonth currentMonth = YearMonth.from(LocalDate.now());
+        YearMonth scheduleMonth = YearMonth.from(schedule.getDueDate());
+        if (scheduleMonth.isAfter(currentMonth)) {
+            throw new IllegalArgumentException("이번 달 회차까지만 미리 납입할 수 있습니다.");
+        }
+    }
+
     private BigDecimal calculatePayoutAmount(
         DepositAccount depositAccount,
         List<DepositPaymentSchedule> schedules,
@@ -326,7 +336,10 @@ public class DepositAccountService {
     ) {
         BigDecimal principal = scale(depositAccount.getCurrentBalance());
         if (!matured) {
-            return principal;
+            BigDecimal earlyInterest = PRODUCT_TYPE_FIXED_DEPOSIT.equals(depositAccount.getDepositProduct().getDepositProductType())
+                ? calculateFixedDepositEarlyCloseInterest(depositAccount)
+                : calculateInstallmentSavingEarlyCloseInterest(depositAccount, schedules);
+            return principal.add(earlyInterest);
         }
 
         BigDecimal interest = PRODUCT_TYPE_FIXED_DEPOSIT.equals(depositAccount.getDepositProduct().getDepositProductType())
@@ -368,6 +381,73 @@ public class DepositAccountService {
         return scale(totalInterest);
     }
 
+    private BigDecimal calculateFixedDepositEarlyCloseInterest(DepositAccount depositAccount) {
+        long depositDays = Math.max(
+            0L,
+            ChronoUnit.DAYS.between(depositAccount.getStartDate(), LocalDate.now())
+        );
+        BigDecimal earlyCloseRate = calculateEarlyCloseRate(depositAccount);
+        return calculateSimpleInterest(depositAccount.getJoinAmount(), earlyCloseRate, depositDays);
+    }
+
+    private BigDecimal calculateInstallmentSavingEarlyCloseInterest(
+        DepositAccount depositAccount,
+        List<DepositPaymentSchedule> schedules
+    ) {
+        LocalDate closeDate = LocalDate.now();
+        BigDecimal earlyCloseRate = calculateEarlyCloseRate(depositAccount);
+        BigDecimal totalInterest = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+
+        for (DepositPaymentSchedule schedule : schedules) {
+            if (!Boolean.TRUE.equals(schedule.getIsPaid()) || schedule.getPaidAmount() == null) {
+                continue;
+            }
+
+            LocalDate paidDate = schedule.getPaidAt() != null
+                ? schedule.getPaidAt().toLocalDate()
+                : schedule.getDueDate();
+            long depositDays = Math.max(0L, ChronoUnit.DAYS.between(paidDate, closeDate));
+            totalInterest = totalInterest.add(
+                calculateSimpleInterest(schedule.getPaidAmount(), earlyCloseRate, depositDays)
+            );
+        }
+
+        return scale(totalInterest);
+    }
+
+    private BigDecimal calculateEarlyCloseRate(DepositAccount depositAccount) {
+        int contractMonths = Math.max(1, depositAccount.getSavingMonth());
+        int elapsedMonths = (int) Math.min(
+            contractMonths,
+            Math.max(0L, ChronoUnit.MONTHS.between(depositAccount.getStartDate(), LocalDate.now()))
+        );
+
+        if (elapsedMonths < 1) {
+            return new BigDecimal("0.10");
+        }
+
+        BigDecimal baseRate = scale(depositAccount.getInterestRate());
+        BigDecimal monthRatio = BigDecimal.valueOf(elapsedMonths)
+            .divide(BigDecimal.valueOf(contractMonths), 6, RoundingMode.HALF_UP);
+
+        BigDecimal multiplier = elapsedMonths < 6
+            ? new BigDecimal("0.50")
+            : elapsedMonths < 8
+                ? new BigDecimal("0.60")
+                : elapsedMonths < 10
+                    ? new BigDecimal("0.70")
+                    : elapsedMonths < 11
+                        ? new BigDecimal("0.80")
+                        : new BigDecimal("0.90");
+
+        BigDecimal minimumRate = elapsedMonths < 6
+            ? new BigDecimal("0.10")
+            : new BigDecimal("0.20");
+
+        BigDecimal calculatedRate = baseRate.multiply(multiplier).multiply(monthRatio);
+        return scale(calculatedRate.max(minimumRate));
+    }
+
     private BigDecimal calculateSimpleInterest(BigDecimal principal, BigDecimal interestRate, long depositDays) {
         if (principal == null || interestRate == null || depositDays <= 0L) {
             return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
@@ -388,11 +468,14 @@ public class DepositAccountService {
     }
 
     private String buildWithdrawMessage(boolean matured, BigDecimal interestAmount) {
+        BigDecimal scaledInterest = scale(interestAmount);
         if (!matured) {
-            return "중도 해지가 완료되었습니다.";
+            if (scaledInterest.compareTo(BigDecimal.ZERO) <= 0) {
+                return "중도 해지가 완료되었습니다.";
+            }
+            return "중도 해지가 완료되었습니다. (중도해지 이자 " + scaledInterest.toPlainString() + "원 포함)";
         }
 
-        BigDecimal scaledInterest = scale(interestAmount);
         if (scaledInterest.compareTo(BigDecimal.ZERO) <= 0) {
             return "만기 해지가 완료되었습니다.";
         }

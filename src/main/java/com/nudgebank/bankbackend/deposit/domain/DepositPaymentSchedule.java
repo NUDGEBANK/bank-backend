@@ -106,4 +106,10 @@ public class DepositPaymentSchedule {
             this.autoTransferStatus = "STOPPED";
         }
     }
+
+    public void markAutoTransferFailed() {
+        if (Boolean.TRUE.equals(this.autoTransferYn) && !Boolean.TRUE.equals(this.isPaid)) {
+            this.autoTransferStatus = "FAILED";
+        }
+    }
 }
