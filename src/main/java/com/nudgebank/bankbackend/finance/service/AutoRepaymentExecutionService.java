@@ -8,6 +8,7 @@ import com.nudgebank.bankbackend.card.domain.Market;
 import com.nudgebank.bankbackend.card.repository.CardTransactionRepository;
 import com.nudgebank.bankbackend.card.repository.MarketCategoryRepository;
 import com.nudgebank.bankbackend.card.repository.MarketRepository;
+import com.nudgebank.bankbackend.common.util.WonAmount;
 import com.nudgebank.bankbackend.finance.dto.AutoRepaymentDecisionResponse;
 import com.nudgebank.bankbackend.loan.domain.Loan;
 import com.nudgebank.bankbackend.loan.domain.LoanHistory;
@@ -38,7 +39,7 @@ public class AutoRepaymentExecutionService {
 
     private static final String CONSUMPTION_ANALYSIS_TYPE = "CONSUMPTION_ANALYSIS";
     private static final String EQUAL_INSTALLMENT_TYPE = "EQUAL_INSTALLMENT";
-    private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+    private static final BigDecimal ZERO = BigDecimal.ZERO;
     private static final BigDecimal ONE_HUNDRED = new BigDecimal("100");
     private static final BigDecimal OVERDUE_SPREAD = new BigDecimal("3.0");
     private static final BigDecimal MAX_OVERDUE_RATE = new BigDecimal("15.0");
@@ -104,12 +105,12 @@ public class AutoRepaymentExecutionService {
         log.info("실제 자동 상환 금액 : " + result.totalPaid());
         if (result.totalPaid().compareTo(BigDecimal.ZERO) > 0) {
             log.info("차감할게요 : " + result.totalPaid());
-            account.withdraw(result.totalPaid());
+            account.withdraw(won(result.totalPaid()));
             CardTransaction autoRepayTransaction = CardTransaction.builder()
                     .card(transaction.getCard())
                     .market(marketRepository.findById(26L).get())
                     .category(marketCategoryRepository.findById(19L).get())
-                    .amount(result.totalPaid())
+                    .amount(won(result.totalPaid()))
                     .transactionDatetime(OffsetDateTime.now())
                     .menuName("대출금 자동상환")
                     .quantity(1)
@@ -149,8 +150,8 @@ public class AutoRepaymentExecutionService {
         if (ratio.compareTo(BigDecimal.ZERO) <= 0) {
             return AutoRepaymentExecutionResult.fromDecision(
                     decision,
-                    BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
-                    nullSafe(resolvedLoan.loanHistory().getRemainingPrincipal()),
+                    ZERO,
+                    won(resolvedLoan.loanHistory().getRemainingPrincipal()),
                     false
             );
         }
@@ -170,13 +171,13 @@ public class AutoRepaymentExecutionService {
         if (repaymentAmount.compareTo(BigDecimal.ZERO) <= 0) {
             return AutoRepaymentExecutionResult.fromDecision(
                     decision,
-                    BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
-                    nullSafe(resolvedLoan.loanHistory().getRemainingPrincipal()),
+                    ZERO,
+                    won(resolvedLoan.loanHistory().getRemainingPrincipal()),
                     false
             );
         }
 
-        account.withdraw(repaymentAmount);
+        account.withdraw(won(repaymentAmount));
         AppliedRepayment appliedRepayment = applyRepaymentToSchedules(
                 resolvedLoan.loanHistory(),
                 resolvedLoan.loan(),
@@ -188,17 +189,17 @@ public class AutoRepaymentExecutionService {
         loanRepaymentHistoryRepository.save(LoanRepaymentHistory.create(
                 resolvedLoan.loanHistory(),
                 transaction,
-                appliedRepayment.totalPaid(),
+                won(appliedRepayment.totalPaid()),
                 toPercent(ratio),
                 OffsetDateTime.now(),
-                resolvedLoan.loanHistory().getRemainingPrincipal()
+                won(resolvedLoan.loanHistory().getRemainingPrincipal())
         ));
 
         return AutoRepaymentExecutionResult.fromDecision(
                 decision,
-                appliedRepayment.totalPaid(),
-                nullSafe(resolvedLoan.loanHistory().getRemainingPrincipal()),
-                appliedRepayment.totalPaid().compareTo(BigDecimal.ZERO) > 0
+                won(appliedRepayment.totalPaid()),
+                won(resolvedLoan.loanHistory().getRemainingPrincipal()),
+                won(appliedRepayment.totalPaid()).compareTo(BigDecimal.ZERO) > 0
         );
     }
 
@@ -209,10 +210,11 @@ public class AutoRepaymentExecutionService {
     ) {
         BigDecimal requestedAmount = nullSafe(transactionAmount)
                 .multiply(ratio)
-                .setScale(2, RoundingMode.HALF_UP);
+                .setScale(10, RoundingMode.HALF_UP)
+                .setScale(0, RoundingMode.DOWN);
 
         BigDecimal availableBalance = nullSafe(account.getBalance());
-        return requestedAmount.min(availableBalance).max(ZERO);
+        return won(requestedAmount.min(availableBalance).max(ZERO));
     }
 
     private BigDecimal calculateRepaymentAmount(
@@ -224,7 +226,8 @@ public class AutoRepaymentExecutionService {
     ) {
         BigDecimal requestedAmount = nullSafe(transactionAmount)
                 .multiply(ratio)
-                .setScale(2, RoundingMode.HALF_UP);
+                .setScale(10, RoundingMode.HALF_UP)
+                .setScale(0, RoundingMode.DOWN);
 
         BigDecimal outstandingAmount = schedules.stream()
                 .map(schedule -> {
@@ -238,9 +241,9 @@ public class AutoRepaymentExecutionService {
                             .add(overdueInterest);
                 })
                 .reduce(ZERO, BigDecimal::add)
-                .setScale(2, RoundingMode.HALF_UP);
+                .setScale(0, RoundingMode.DOWN);
         BigDecimal availableBalance = nullSafe(account.getBalance());
-        return requestedAmount.min(outstandingAmount).min(availableBalance).max(ZERO);
+        return won(requestedAmount.min(outstandingAmount).min(availableBalance).max(ZERO));
     }
 
     private AppliedRepayment applyRepaymentToSchedules(
@@ -249,7 +252,7 @@ public class AutoRepaymentExecutionService {
             List<RepaymentSchedule> schedules,
             BigDecimal requestedAmount
     ) {
-        BigDecimal remainingAmount = requestedAmount;
+        BigDecimal remainingAmount = won(requestedAmount);
         BigDecimal paidPrincipal = ZERO;
         BigDecimal paidInterest = ZERO;
         BigDecimal paidOverdueInterest = ZERO;
@@ -296,10 +299,10 @@ public class AutoRepaymentExecutionService {
         loanHistory.synchronizeRemainingPrincipal(sumRemainingPrincipal(schedules));
 
         return new AppliedRepayment(
-                paidPrincipal.add(paidInterest).add(paidOverdueInterest),
-                paidPrincipal,
-                paidInterest,
-                paidOverdueInterest
+                won(paidPrincipal.add(paidInterest).add(paidOverdueInterest)),
+                won(paidPrincipal),
+                won(paidInterest),
+                won(paidOverdueInterest)
         );
     }
 
@@ -343,7 +346,8 @@ public class AutoRepaymentExecutionService {
                 .multiply(overdueRate)
                 .divide(new BigDecimal("100"), 10, RoundingMode.HALF_UP)
                 .multiply(BigDecimal.valueOf(overdueDays))
-                .divide(BigDecimal.valueOf(365), 2, RoundingMode.HALF_UP);
+                .divide(BigDecimal.valueOf(365), 10, RoundingMode.HALF_UP)
+                .setScale(0, RoundingMode.DOWN);
     }
 
     private ResolvedConsumptionLoan resolveConsumptionAnalysisLoan(Long memberId, CardTransaction transaction) {
@@ -385,6 +389,10 @@ public class AutoRepaymentExecutionService {
         return value == null ? ZERO : value;
     }
 
+    private BigDecimal floorWon(BigDecimal value) {
+        return nullSafe(value).setScale(0, RoundingMode.DOWN);
+    }
+
     private void refreshEqualInstallmentSchedulesIfNeeded(
             LoanHistory loanHistory,
             Loan loan,
@@ -424,10 +432,14 @@ public class AutoRepaymentExecutionService {
             BigDecimal plannedInterest = remainingPrincipal
                     .multiply(nullSafe(loan.getInterestRate()))
                     .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
-                    .divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
+                    .divide(BigDecimal.valueOf(12), 10, RoundingMode.HALF_UP)
+                    .setScale(0, RoundingMode.DOWN);
             BigDecimal plannedPrincipal = remainingUntouchedSchedules == 1
                     ? remainingPrincipal
-                    : monthlyPayment.subtract(plannedInterest).max(BigDecimal.ZERO);
+                    : monthlyPayment.subtract(plannedInterest).max(BigDecimal.ZERO).min(remainingPrincipal);
+
+            plannedPrincipal = floorWon(plannedPrincipal);
+            plannedInterest = floorWon(plannedInterest);
 
             if (nullSafe(schedule.getPlannedPrincipal()).compareTo(plannedPrincipal) != 0
                     || nullSafe(schedule.getPlannedInterest()).compareTo(plannedInterest) != 0) {
@@ -461,14 +473,16 @@ public class AutoRepaymentExecutionService {
                 .divide(BigDecimal.valueOf(12), 10, RoundingMode.HALF_UP);
 
         if (monthlyRate.compareTo(BigDecimal.ZERO) == 0) {
-            return principalAmount.divide(BigDecimal.valueOf(repaymentMonths), 2, RoundingMode.HALF_UP);
+            return principalAmount.divide(BigDecimal.valueOf(repaymentMonths), 0, RoundingMode.DOWN);
         }
 
         BigDecimal factor = BigDecimal.ONE.add(monthlyRate).pow(repaymentMonths);
         BigDecimal numerator = principalAmount.multiply(monthlyRate).multiply(factor);
         BigDecimal denominator = factor.subtract(BigDecimal.ONE);
 
-        return numerator.divide(denominator, 2, RoundingMode.HALF_UP);
+        return numerator
+                .divide(denominator, 10, RoundingMode.HALF_UP)
+                .setScale(0, RoundingMode.DOWN);
     }
 
     private BigDecimal sumRemainingPrincipal(List<RepaymentSchedule> schedules) {
@@ -476,7 +490,7 @@ public class AutoRepaymentExecutionService {
                 .map(RepaymentSchedule::getRemainingPlannedPrincipal)
                 .map(this::nullSafe)
                 .reduce(ZERO, BigDecimal::add)
-                .setScale(2, RoundingMode.HALF_UP);
+                .setScale(0, RoundingMode.DOWN);
     }
 
     private boolean hasRecordedPayment(RepaymentSchedule schedule) {
@@ -510,7 +524,7 @@ public class AutoRepaymentExecutionService {
                     null,
                     null,
                     BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP),
-                    BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
+                    ZERO,
                     null
             );
         }
@@ -521,7 +535,7 @@ public class AutoRepaymentExecutionService {
                     "HOLD",
                     "FAILED",
                     BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP),
-                    BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
+                    ZERO,
                     null
             );
         }
@@ -543,9 +557,13 @@ public class AutoRepaymentExecutionService {
                     decision.getRepaymentAction(),
                     decision.getPolicyGrade(),
                     repaymentRate,
-                    repaymentAmount,
-                    remainingLoanBalance
+                    WonAmount.floor(repaymentAmount),
+                    WonAmount.floor(remainingLoanBalance)
             );
         }
+    }
+
+    private BigDecimal won(BigDecimal value) {
+        return WonAmount.floor(value);
     }
 }

@@ -4,6 +4,7 @@ import com.nudgebank.bankbackend.certificate.domain.CertificateMaster;
 import com.nudgebank.bankbackend.certificate.domain.CertificateSubmission;
 import com.nudgebank.bankbackend.certificate.repository.CertificateMasterRepository;
 import com.nudgebank.bankbackend.certificate.repository.CertificateSubmissionRepository;
+import com.nudgebank.bankbackend.common.util.WonAmount;
 import com.nudgebank.bankbackend.loan.domain.Loan;
 import com.nudgebank.bankbackend.loan.domain.LoanApplication;
 import com.nudgebank.bankbackend.loan.domain.LoanHistory;
@@ -86,9 +87,9 @@ public class MyLoanManagementService {
         return new MyLoanSummaryResponse(
             loanHistory.getId(),
             loanHistory.getStatus(),
-            totalPrincipal,
-            remainingPrincipal,
-            repaidPrincipal.max(BigDecimal.ZERO),
+            won(totalPrincipal),
+            won(remainingPrincipal),
+            won(repaidPrincipal.max(BigDecimal.ZERO)),
             baseInterestRate,
             minimumInterestRate,
             preferentialRateDiscount,
@@ -97,13 +98,13 @@ public class MyLoanManagementService {
             loanHistory.getStartDate(),
             displayEndDate,
             nextSchedule != null ? nextSchedule.getDueDate() : loanHistory.getExpectedRepaymentDate(),
-            nextSchedule != null ? nullSafe(nextSchedule.getPlannedPrincipal()) : BigDecimal.ZERO,
-            nextSchedule != null ? nullSafe(nextSchedule.getPlannedInterest()) : BigDecimal.ZERO,
+            nextSchedule != null ? won(nextSchedule.getPlannedPrincipal()) : BigDecimal.ZERO,
+            nextSchedule != null ? won(nextSchedule.getPlannedInterest()) : BigDecimal.ZERO,
             nextSchedule != null
-                ? nullSafe(nextSchedule.getPlannedPrincipal()).add(nullSafe(nextSchedule.getPlannedInterest()))
+                ? won(nullSafe(nextSchedule.getPlannedPrincipal()).add(nullSafe(nextSchedule.getPlannedInterest())))
                 : BigDecimal.ZERO,
-            cumulativeInterest,
-            remainingInterestAmount,
+            won(cumulativeInterest),
+            won(remainingInterestAmount),
             loanHistory.getRepaymentAccountNumber()
         );
     }
@@ -126,10 +127,10 @@ public class MyLoanManagementService {
             .map(schedule -> new MyLoanRepaymentScheduleResponse(
                 schedule.getScheduleId(),
                 schedule.getDueDate(),
-                nullSafe(schedule.getPlannedPrincipal()),
-                nullSafe(schedule.getPlannedInterest()),
-                nullSafe(schedule.getPaidPrincipal()),
-                nullSafe(schedule.getPaidInterest()),
+                won(schedule.getPlannedPrincipal()),
+                won(schedule.getPlannedInterest()),
+                won(schedule.getPaidPrincipal()),
+                won(schedule.getPaidInterest()),
                 Boolean.TRUE.equals(schedule.getIsSettled()),
                 resolveOverdueDays(schedule)
             ))
@@ -147,17 +148,17 @@ public class MyLoanManagementService {
             .findTop10ByLoanHistory_IdOrderByRepaymentDatetimeDesc(loanHistory.getId()).stream()
             .map(history -> new MyLoanRepaymentHistoryResponse(
                 history.getRepaymentId(),
-                nullSafe(history.getRepaymentAmount()),
+                won(history.getRepaymentAmount()),
                 nullSafe(history.getRepaymentRate()),
                 history.getRepaymentDatetime(),
-                nullSafe(history.getRemainingBalance())
+                won(history.getRemainingBalance())
             ))
             .toList();
     }
 
     private MyLoanSummaryResponse buildPendingLoanSummary(Long memberId, String productKey) {
         LoanApplication application = ensureDisplayableLoanExists(memberId, productKey);
-        BigDecimal totalPrincipal = nullSafe(application.getLoanAmount());
+        BigDecimal totalPrincipal = won(application.getLoanAmount());
         BigDecimal interestRate = resolveInitialInterestRate(application);
         BigDecimal baseInterestRate = resolveBaseInterestRate(application);
         BigDecimal minimumInterestRate = resolveMinimumInterestRate(application);
@@ -176,8 +177,8 @@ public class MyLoanManagementService {
         return new MyLoanSummaryResponse(
             null,
             application.getApplicationStatus().name(),
-            totalPrincipal,
-            totalPrincipal,
+            won(totalPrincipal),
+            won(totalPrincipal),
             BigDecimal.ZERO,
             baseInterestRate,
             minimumInterestRate,
@@ -187,11 +188,11 @@ public class MyLoanManagementService {
             startDate,
             startDate.plusMonths(repaymentMonths),
             startDate.plusMonths(1),
-            resolvePendingNextPaymentPrincipal(application, totalPrincipal, interestRate, repaymentMonths),
-            resolvePendingNextPaymentInterest(application, totalPrincipal, interestRate),
-            nextPaymentAmount,
+            won(resolvePendingNextPaymentPrincipal(application, totalPrincipal, interestRate, repaymentMonths)),
+            won(resolvePendingNextPaymentInterest(application, totalPrincipal, interestRate)),
+            won(nextPaymentAmount),
             BigDecimal.ZERO,
-            resolvePendingRemainingInterestAmount(application, totalPrincipal, interestRate, repaymentMonths),
+            won(resolvePendingRemainingInterestAmount(application, totalPrincipal, interestRate, repaymentMonths)),
             null
         );
     }
@@ -359,7 +360,8 @@ public class MyLoanManagementService {
         return totalPrincipal
             .multiply(interestRate)
             .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
-            .divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
+            .divide(BigDecimal.valueOf(12), 10, RoundingMode.HALF_UP)
+            .setScale(0, RoundingMode.DOWN);
     }
 
     private BigDecimal resolvePendingRemainingInterestAmount(
@@ -414,14 +416,16 @@ public class MyLoanManagementService {
             .divide(BigDecimal.valueOf(12), 10, RoundingMode.HALF_UP);
 
         if (monthlyRate.compareTo(BigDecimal.ZERO) == 0) {
-            return principalAmount.divide(BigDecimal.valueOf(repaymentMonths), 2, RoundingMode.HALF_UP);
+            return principalAmount.divide(BigDecimal.valueOf(repaymentMonths), 0, RoundingMode.DOWN);
         }
 
         BigDecimal factor = BigDecimal.ONE.add(monthlyRate).pow(repaymentMonths);
         BigDecimal numerator = principalAmount.multiply(monthlyRate).multiply(factor);
         BigDecimal denominator = factor.subtract(BigDecimal.ONE);
 
-        return numerator.divide(denominator, 2, RoundingMode.HALF_UP);
+        return numerator
+            .divide(denominator, 10, RoundingMode.HALF_UP)
+            .setScale(0, RoundingMode.DOWN);
     }
 
     private BigDecimal calculateEqualInstallmentTotalInterest(
@@ -442,7 +446,8 @@ public class MyLoanManagementService {
             BigDecimal plannedInterest = remainingPrincipal
                 .multiply(annualInterestRate)
                 .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
-                .divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
+                .divide(BigDecimal.valueOf(12), 10, RoundingMode.HALF_UP)
+                .setScale(0, RoundingMode.DOWN);
             BigDecimal plannedPrincipal = month == repaymentMonths
                 ? principalAmount.subtract(allocatedPrincipal)
                 : monthlyPayment.subtract(plannedInterest).max(BigDecimal.ZERO);
@@ -497,10 +502,14 @@ public class MyLoanManagementService {
             BigDecimal plannedInterest = remainingPrincipal
                 .multiply(annualInterestRate)
                 .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
-                .divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
+                .divide(BigDecimal.valueOf(12), 10, RoundingMode.HALF_UP)
+                .setScale(0, RoundingMode.DOWN);
             BigDecimal plannedPrincipal = remainingUntouchedSchedules == 1
                 ? remainingPrincipal
-                : monthlyPayment.subtract(plannedInterest).max(BigDecimal.ZERO);
+                : monthlyPayment.subtract(plannedInterest).max(BigDecimal.ZERO).min(remainingPrincipal);
+
+            plannedPrincipal = floorWon(plannedPrincipal);
+            plannedInterest = floorWon(plannedInterest);
 
             if (nullSafe(schedule.getPlannedPrincipal()).compareTo(plannedPrincipal) != 0
                 || nullSafe(schedule.getPlannedInterest()).compareTo(plannedInterest) != 0) {
@@ -570,5 +579,13 @@ public class MyLoanManagementService {
 
     private BigDecimal nullSafe(BigDecimal value) {
         return value != null ? value : BigDecimal.ZERO;
+    }
+
+    private BigDecimal floorWon(BigDecimal value) {
+        return nullSafe(value).setScale(0, RoundingMode.DOWN);
+    }
+
+    private BigDecimal won(BigDecimal value) {
+        return WonAmount.floor(value);
     }
 }
