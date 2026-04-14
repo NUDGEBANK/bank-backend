@@ -8,6 +8,8 @@ import java.util.Optional;
 
 public interface LoanHistoryRepository extends JpaRepository<LoanHistory, Long> {
 
+    List<LoanHistory> findAllByMember_MemberIdOrderByCreatedAtDesc(Long memberId);
+
     List<LoanHistory> findAllByCard_CardIdAndStatusOrderByExpectedRepaymentDateAscCreatedAtDesc(Long cardId, String status);
 
     List<LoanHistory> findAllByCard_CardIdAndStatusInOrderByExpectedRepaymentDateAscCreatedAtDesc(
