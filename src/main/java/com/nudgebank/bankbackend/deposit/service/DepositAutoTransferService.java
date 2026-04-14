@@ -32,7 +32,11 @@ public class DepositAutoTransferService {
 
     @Transactional(readOnly = true)
     public List<Long> findDueScheduleIds(LocalDate today) {
-        return depositPaymentScheduleRepository.findDueAutoTransferScheduleIds(today.getDayOfMonth(), STATUS_ACTIVE);
+        return depositPaymentScheduleRepository.findDueAutoTransferScheduleIds(
+            today.getDayOfMonth(),
+            today,
+            STATUS_ACTIVE
+        );
     }
 
     @Transactional

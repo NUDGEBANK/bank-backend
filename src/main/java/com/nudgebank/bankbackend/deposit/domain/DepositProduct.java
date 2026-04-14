@@ -16,7 +16,9 @@ import java.math.BigDecimal;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Table(name = "deposit_product")
+@Table(name = "deposit_product", uniqueConstraints = {
+    @jakarta.persistence.UniqueConstraint(name = "uk_deposit_product_type", columnNames = "deposit_product_type")
+})
 public class DepositProduct {
 
     @Id

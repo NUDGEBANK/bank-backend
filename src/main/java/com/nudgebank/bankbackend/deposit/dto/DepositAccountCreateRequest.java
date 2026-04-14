@@ -27,9 +27,12 @@ public record DepositAccountCreateRequest(
         if (monthlyPaymentAmount != null && monthlyPaymentAmount.signum() <= 0) {
             throw new IllegalArgumentException("monthlyPaymentAmount는 0보다 커야 합니다.");
         }
-        if (Boolean.TRUE.equals(autoTransferYn)
-            && (autoTransferDay == null || autoTransferDay < 1 || autoTransferDay > 31)) {
-            throw new IllegalArgumentException("autoTransferDay는 1~31 사이여야 합니다.");
+        if (Boolean.TRUE.equals(autoTransferYn)) {
+            if (autoTransferDay == null || autoTransferDay < 1 || autoTransferDay > 31) {
+                throw new IllegalArgumentException("autoTransferDay는 1~31 사이여야 합니다.");
+            }
+        } else if (autoTransferDay != null) {
+            throw new IllegalArgumentException("autoTransferYn이 false/null이면 autoTransferDay는 비워야 합니다.");
         }
     }
 }

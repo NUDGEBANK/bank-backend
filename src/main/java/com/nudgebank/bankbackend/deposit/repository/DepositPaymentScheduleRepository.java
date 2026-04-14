@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,11 +23,13 @@ public interface DepositPaymentScheduleRepository extends JpaRepository<DepositP
         where schedule.autoTransferYn = true
           and schedule.isPaid = false
           and schedule.autoTransferDay = :dayOfMonth
+          and schedule.dueDate <= :today
           and depositAccount.status = :accountStatus
         order by depositAccount.depositAccountId asc, schedule.installmentNo asc
         """)
     List<Long> findDueAutoTransferScheduleIds(
         @Param("dayOfMonth") Integer dayOfMonth,
+        @Param("today") LocalDate today,
         @Param("accountStatus") String accountStatus
     );
 

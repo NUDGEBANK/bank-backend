@@ -9,12 +9,14 @@ import com.nudgebank.bankbackend.deposit.dto.DepositPaymentRequest;
 import com.nudgebank.bankbackend.deposit.service.DepositAccountService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -66,7 +68,7 @@ public class DepositAccountController {
     private Long extractMemberId(Authentication authentication) {
         Long memberId = SecurityUtil.extractUserId(authentication);
         if (memberId == null) {
-            throw new IllegalArgumentException("인증 정보가 없습니다.");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "인증 정보가 없습니다.");
         }
         return memberId;
     }

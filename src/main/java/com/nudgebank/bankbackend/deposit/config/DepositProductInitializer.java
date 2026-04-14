@@ -26,7 +26,7 @@ public class DepositProductInitializer implements CommandLineRunner {
             new DepositProductSeed(
                 "정기예금",
                 "FIXED_DEPOSIT",
-                "신한은행의 안정적인 정기예금 운용 방식과 신한저축은행의 디지털 금리 경쟁력을 참고해 리뉴얼한 목돈 예치형 상품입니다. 가입 즉시 금리가 확정되고 만기까지 안정적으로 운용할 수 있습니다.",
+                "안정적인 금리 운용과 만기까지 예치 혜택을 확인할 수 있는 목돈 예치형 상품입니다. 가입 즉시 금리가 확정되고 만기까지 안정적으로 운용할 수 있습니다.",
                 new BigDecimal("100000.00"),
                 null,
                 3,
@@ -41,7 +41,7 @@ public class DepositProductInitializer implements CommandLineRunner {
             new DepositProductSeed(
                 "정기적금",
                 "FIXED_SAVING",
-                "신한은행의 간편결제 연계 적금 구성과 신한저축은행의 실속형 고금리 적금 포지션을 참고한 정기적금 상품입니다. 매월 일정 금액을 납입하며 우대금리 구간을 길게 가져갈 수 있도록 설계했습니다.",
+                "매월 일정 금액을 납입하며 만기까지 차곡차곡 모을 수 있는 정기적금 상품입니다. 회차별 납입과 자동이체를 함께 고려해 설계했습니다.",
                 new BigDecimal("10000.00"),
                 new BigDecimal("300000.00"),
                 6,
