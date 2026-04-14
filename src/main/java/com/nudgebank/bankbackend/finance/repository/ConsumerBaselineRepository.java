@@ -8,4 +8,6 @@ import java.util.Optional;
 
 public interface ConsumerBaselineRepository extends JpaRepository<ConsumerBaseline, Long> {
     Optional<ConsumerBaseline> findByMemberIdAndAnalysisYearMonth(Long memberId, LocalDate analysisYearMonth);
+
+    Optional<ConsumerBaseline> findTopByMemberIdOrderByAnalysisYearMonthDesc(Long memberId);
 }
