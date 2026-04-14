@@ -38,7 +38,11 @@ public class ConsumptionAnalysisController {
             return consumptionAnalysisQueryService.getLatestPrediction(memberId);
         } catch (IllegalStateException exception) {
             log.error("AI prediction pipeline failed for memberId={}", memberId, exception);
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, exception.getMessage(), exception);
+            throw new ResponseStatusException(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "AI 소비 예측 처리 중 오류가 발생했습니다.",
+                exception
+            );
         }
     }
 
