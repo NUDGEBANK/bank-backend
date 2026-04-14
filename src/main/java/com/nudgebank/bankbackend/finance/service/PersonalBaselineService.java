@@ -83,7 +83,7 @@ public class PersonalBaselineService {
         LocalDate baselineStartDate = firstTransactionDate.isAfter(ninetyDaysAgo) ? firstTransactionDate : ninetyDaysAgo;
         LocalDate baselineEndDate = today.plusDays(1); // end exclusive
 
-        List<CardTransaction> transactions = cardTransactionRepository.findByMemberIdAndTransactionDatetimeBetween(
+        List<CardTransaction> transactions = cardTransactionRepository.findByMemberIdAndTransactionDatetimeGreaterThanEqualAndTransactionDatetimeLessThan(
                 memberId,
                 baselineStartDate.atStartOfDay(KST).toOffsetDateTime(),
                 baselineEndDate.atStartOfDay(KST).toOffsetDateTime()
@@ -236,7 +236,7 @@ public class PersonalBaselineService {
         OffsetDateTime startOfMonth = analysisYearMonth.atStartOfDay(KST).toOffsetDateTime();
         OffsetDateTime startOfNextMonth = analysisYearMonth.plusMonths(1).atStartOfDay(KST).toOffsetDateTime();
 
-        List<CardTransaction> currentMonthTransactions = cardTransactionRepository.findByMemberIdAndTransactionDatetimeBetween(
+        List<CardTransaction> currentMonthTransactions = cardTransactionRepository.findByMemberIdAndTransactionDatetimeGreaterThanEqualAndTransactionDatetimeLessThan(
                 memberId,
                 startOfMonth,
                 startOfNextMonth

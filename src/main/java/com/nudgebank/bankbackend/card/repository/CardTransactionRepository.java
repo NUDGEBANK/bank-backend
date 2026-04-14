@@ -55,7 +55,7 @@ public interface CardTransactionRepository extends JpaRepository<CardTransaction
       and ct.transactionDatetime < :end
     order by ct.transactionDatetime asc
 """)
-    List<CardTransaction> findByMemberIdAndTransactionDatetimeBetween(
+    List<CardTransaction> findByMemberIdAndTransactionDatetimeGreaterThanEqualAndTransactionDatetimeLessThan(
             @Param("memberId") Long memberId,
             @Param("start") OffsetDateTime start,
             @Param("end") OffsetDateTime end
