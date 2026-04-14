@@ -45,6 +45,7 @@ public class SecurityConfig {
             .requestMatchers("/api/auth/**").permitAll()
             .requestMatchers("/api/cards/payment").authenticated()
             .requestMatchers("/api/finance-status/**").authenticated()
+            .requestMatchers("/api/consumption-analysis/**").authenticated()
             .requestMatchers("/api/baselines/**").authenticated()
             .requestMatchers("/api/auto-repayment/**").permitAll()
             .requestMatchers("/api/loan-applications/**").authenticated()
