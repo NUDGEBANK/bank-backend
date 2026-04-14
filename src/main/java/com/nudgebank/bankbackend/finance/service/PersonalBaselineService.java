@@ -60,7 +60,7 @@ public class PersonalBaselineService {
         }
 
         LocalDate today = LocalDate.now(KST);
-        LocalDate firstTransactionDate = firstTransactionDatetime.toLocalDate();
+        LocalDate firstTransactionDate = firstTransactionDatetime.atZoneSameInstant(KST).toLocalDate();
         LocalDate ninetyDaysAgo = today.minusDays(90);
         LocalDate baselineStartDate = firstTransactionDate.isAfter(ninetyDaysAgo) ? firstTransactionDate : ninetyDaysAgo;
         LocalDate baselineEndDate = today.plusDays(1); // end exclusive

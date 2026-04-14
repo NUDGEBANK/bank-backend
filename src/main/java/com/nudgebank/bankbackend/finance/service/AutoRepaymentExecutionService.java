@@ -94,13 +94,14 @@ public class AutoRepaymentExecutionService {
                 account
         );
 
-        log.info("자동 상환 금액 : " + repaymentAmount);
+        log.info("예상 자동 상환 금액 : " + repaymentAmount);
 
         if (repaymentAmount.compareTo(ZERO) <= 0) {
             return;
         }
 
         RepaymentService.RepaymentResult result = repaymentService.repay(resolvedLoan.loanHistory(), resolvedLoan.loan(), repaymentAmount);
+        log.info("실제 자동 상환 금액 : " + result.totalPaid());
         if (result.totalPaid().compareTo(BigDecimal.ZERO) > 0) {
             log.info("차감할게요 : " + result.totalPaid());
             account.withdraw(result.totalPaid());
@@ -108,7 +109,7 @@ public class AutoRepaymentExecutionService {
                     .card(transaction.getCard())
                     .market(marketRepository.findById(26L).get())
                     .category(marketCategoryRepository.findById(19L).get())
-                    .amount(repaymentAmount)
+                    .amount(result.totalPaid())
                     .transactionDatetime(OffsetDateTime.now())
                     .menuName("대출금 자동상환")
                     .quantity(1)
