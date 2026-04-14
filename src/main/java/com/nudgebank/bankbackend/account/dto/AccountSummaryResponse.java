@@ -6,7 +6,6 @@ public record AccountSummaryResponse(
     Long accountId,
     String accountName,
     String accountNumber,
-    BigDecimal balance,
-    BigDecimal protectedBalance
+    BigDecimal balance
 ) {
 }

@@ -21,8 +21,7 @@ public class AccountService {
             account.getAccountId(),
             account.getAccountName(),
             account.getAccountNumber(),
-            account.getBalance(),
-            account.getProtectedBalance()
+            account.getBalance()
         ))
         .toList();
   }
