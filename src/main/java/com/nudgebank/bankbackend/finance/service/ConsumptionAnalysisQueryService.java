@@ -11,6 +11,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 @Service
@@ -31,6 +33,17 @@ public class ConsumptionAnalysisQueryService {
         return consumerPredictionRepository.findTopByMemberIdOrderByAnalysisYearMonthDesc(memberId)
                 .map(this::toPredictionResponse)
                 .orElse(null);
+    }
+
+    public ConsumerPredictionResponse getPredictionForAnalysisMonthUpdatedAfter(
+            Long memberId,
+            LocalDate analysisYearMonth,
+            OffsetDateTime startedAt
+    ) {
+        return consumerPredictionRepository
+                .findByMemberIdAndAnalysisYearMonthAndUpdatedAtGreaterThanEqual(memberId, analysisYearMonth, startedAt)
+                .map(this::toPredictionResponse)
+                .orElseThrow(() -> new IllegalStateException("이번 실행 결과에 해당하는 소비 예측 데이터를 찾지 못했습니다."));
     }
 
     public ConsumptionAnalysisOverviewResponse getOverview(Long memberId) {
