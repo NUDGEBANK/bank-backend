@@ -242,10 +242,10 @@ public class CreditScoreService {
     double score = BASE_SCORE;
 
     score += calculateNetAssetScore(metrics.netAsset().doubleValue());
-    score += scaleScore(metrics.activeMonths(), 0, 3, 55);
+    score += scaleScore(metrics.activeMonths(), 0, 3, 42);
     score += calculateSpendingBurdenScore(metrics.netAsset().doubleValue(), metrics.averageMonthlySpending().doubleValue());
     score += calculateVolatilityScore(metrics.noTransactions(), metrics.volatility().doubleValue());
-    score += scaleScore(metrics.recentTransactionCount(), 0, 30, 35);
+    score += scaleScore(metrics.recentTransactionCount(), 0, 30, 28);
     score += calculateRecencyScore(metrics.daysSinceLatestTransaction(), metrics.noTransactions());
     score += calculateLoanBurdenScore(
         metrics.totalLoanRemaining().doubleValue(),
@@ -319,15 +319,15 @@ public class CreditScoreService {
       return 0;
     }
     if (netAssetValue <= 5_000_000) {
-      return scaleScore(netAssetValue, 0, 5_000_000, 25);
+      return scaleScore(netAssetValue, 0, 5_000_000, 18);
     }
     if (netAssetValue <= 20_000_000) {
-      return 25 + scaleScore(netAssetValue - 5_000_000, 0, 15_000_000, 25);
+      return 18 + scaleScore(netAssetValue - 5_000_000, 0, 15_000_000, 17);
     }
     if (netAssetValue <= 50_000_000) {
-      return 50 + scaleScore(netAssetValue - 20_000_000, 0, 30_000_000, 20);
+      return 35 + scaleScore(netAssetValue - 20_000_000, 0, 30_000_000, 15);
     }
-    return 70;
+    return 50;
   }
 
   private double calculateSpendingBurdenScore(double netAssetValue, double averageMonthlyValue) {
@@ -339,18 +339,18 @@ public class CreditScoreService {
     double burdenRatio = averageMonthlyValue / referenceAsset;
 
     if (burdenRatio <= 0.15) {
-      return 45;
+      return 35;
     }
     if (burdenRatio <= 0.30) {
-      return 45 - scaleScore(burdenRatio - 0.15, 0, 0.15, 20);
+      return 35 - scaleScore(burdenRatio - 0.15, 0, 0.15, 14);
     }
     if (burdenRatio <= 0.60) {
-      return 25 - scaleScore(burdenRatio - 0.30, 0, 0.30, 30);
+      return 21 - scaleScore(burdenRatio - 0.30, 0, 0.30, 22);
     }
     if (burdenRatio <= 1.00) {
-      return -5 - scaleScore(burdenRatio - 0.60, 0, 0.40, 20);
+      return -1 - scaleScore(burdenRatio - 0.60, 0, 0.40, 16);
     }
-    return -25 - scaleScore(Math.min(burdenRatio - 1.00, 1.50), 0, 1.50, 10);
+    return -17 - scaleScore(Math.min(burdenRatio - 1.00, 1.50), 0, 1.50, 8);
   }
 
   private double calculateVolatilityScore(boolean noTransactions, double volatility) {
@@ -361,78 +361,78 @@ public class CreditScoreService {
       return 0;
     }
     if (volatility <= 0.20) {
-      return 60;
+      return 36;
     }
     if (volatility <= 0.40) {
-      return 60 - scaleScore(volatility - 0.20, 0, 0.20, 20);
+      return 36 - scaleScore(volatility - 0.20, 0, 0.20, 12);
     }
     if (volatility <= 0.80) {
-      return 40 - scaleScore(volatility - 0.40, 0, 0.40, 40);
+      return 24 - scaleScore(volatility - 0.40, 0, 0.40, 24);
     }
-    return -scaleScore(Math.min(volatility - 0.80, 1.20), 0, 1.20, 30);
+    return -scaleScore(Math.min(volatility - 0.80, 1.20), 0, 1.20, 18);
   }
 
   private double calculateRecencyScore(long daysSinceLatest, boolean noTransactions) {
     if (noTransactions || daysSinceLatest < 0) {
-      return -25;
+      return -18;
     }
     if (daysSinceLatest <= 14) {
-      return 25;
+      return 18;
     }
     if (daysSinceLatest <= 30) {
-      return 15;
+      return 12;
     }
     if (daysSinceLatest <= 60) {
       return 0;
     }
     if (daysSinceLatest <= 90) {
-      return -10;
+      return -8;
     }
-    return -25;
+    return -18;
   }
 
   private double calculateLoanBurdenScore(double remainingPrincipalValue, double grossAssetValue) {
     if (remainingPrincipalValue <= 0) {
-      return 5;
+      return 3;
     }
 
     double referenceAsset = Math.max(grossAssetValue, 500_000);
     double debtRatio = remainingPrincipalValue / referenceAsset;
 
     if (debtRatio <= 0.30) {
-      return 65 - scaleScore(debtRatio, 0, 0.30, 20);
+      return 40 - scaleScore(debtRatio, 0, 0.30, 14);
     }
     if (debtRatio <= 1.00) {
-      return 45 - scaleScore(debtRatio - 0.30, 0, 0.70, 45);
+      return 26 - scaleScore(debtRatio - 0.30, 0, 0.70, 24);
     }
     if (debtRatio <= 2.00) {
-      return -scaleScore(debtRatio - 1.00, 0, 1.00, 40);
+      return -scaleScore(debtRatio - 1.00, 0, 1.00, 18);
     }
-    return -40 - scaleScore(Math.min(debtRatio - 2.00, 2.00), 0, 2.00, 30);
+    return -18 - scaleScore(Math.min(debtRatio - 2.00, 2.00), 0, 2.00, 12);
   }
 
   private double calculateLoanRepaymentScore(LoanMetrics metrics) {
     if (metrics.overdueLoanCount() > 0) {
-      return -80;
+      return -60;
     }
     if (metrics.dueScheduleCount() <= 0) {
-      return metrics.loanCount() > 0 ? 10 : 0;
+      return metrics.loanCount() > 0 ? 8 : 0;
     }
 
     double overdueRatio = metrics.overdueDueCount() / (double) metrics.dueScheduleCount();
     if (metrics.overdueDueCount() == 0 && metrics.maxOverdueDays() == 0) {
-      return 55;
+      return 34;
     }
     if (overdueRatio <= 0.10 && metrics.maxOverdueDays() <= 7) {
-      return 20;
+      return 12;
     }
     if (overdueRatio <= 0.25 && metrics.maxOverdueDays() <= 30) {
-      return -10;
+      return -8;
     }
     if (overdueRatio <= 0.50) {
-      return -40;
+      return -28;
     }
-    return -80;
+    return -60;
   }
 
   private double calculateDepositHabitScore(DepositMetrics metrics) {
@@ -442,26 +442,26 @@ public class CreditScoreService {
 
     double score = 0;
     if (metrics.activeDepositCount() > 0) {
-      score += 10;
+      score += 7;
     }
     if (metrics.maturityClosedCount() > 0) {
-      score += 15;
+      score += 10;
     }
     if (metrics.dueScheduleCount() > 0) {
       double paidRatio = metrics.paidDueCount() / (double) metrics.dueScheduleCount();
       if (paidRatio >= 0.95) {
-        score += 15;
-      } else if (paidRatio >= 0.75) {
         score += 10;
+      } else if (paidRatio >= 0.75) {
+        score += 7;
       } else if (paidRatio >= 0.50) {
-        score += 5;
+        score += 4;
       } else {
-        score -= 10;
+        score -= 7;
       }
     }
 
-    score -= Math.min(metrics.earlyClosedCount() * 10.0, 20.0);
-    return Math.max(-20, Math.min(40, score));
+    score -= Math.min(metrics.earlyClosedCount() * 7.0, 14.0);
+    return Math.max(-14, Math.min(27, score));
   }
 
   private double calculateInitialProfileScore(CreditMetrics metrics) {
@@ -471,7 +471,7 @@ public class CreditScoreService {
     boolean noCardsOrTransactions = metrics.noCards() || metrics.noTransactions();
 
     if (noAccounts && noLoans && noDeposits && noCardsOrTransactions) {
-      return -40;
+      return -45;
     }
     return 0;
   }
