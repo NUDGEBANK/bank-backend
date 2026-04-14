@@ -16,7 +16,6 @@ import com.nudgebank.bankbackend.finance.repository.ConsumerBaselineRepository;
 import com.nudgebank.bankbackend.finance.repository.ConsumerMonthlyAnalysisRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -177,27 +176,7 @@ public class PersonalBaselineService {
         OffsetDateTime now = OffsetDateTime.now(KST);
         LocalDate analysisYearMonth = today.withDayOfMonth(1);
         BigDecimal volatilityIndex = calculateVolatilityIndex(personal.volatility());
-
-        ConsumerBaseline baseline = consumerBaselineRepository
-                .findByMemberIdAndAnalysisYearMonth(memberId, analysisYearMonth)
-                .orElse(null);
-
-        if (baseline != null) {
-            baseline.update(
-                    personal.avgSpending(),
-                    personal.essentialRatio(),
-                    personal.normalRatio(),
-                    personal.discretionaryRatio(),
-                    personal.riskRatio(),
-                    personal.volatility(),
-                    volatilityIndex,
-                    analysisYearMonth,
-                    now
-            );
-            return baseline;
-        }
-
-        ConsumerBaseline created = ConsumerBaseline.create(
+        consumerBaselineRepository.upsert(
                 memberId,
                 personal.avgSpending(),
                 personal.essentialRatio(),
@@ -209,25 +188,8 @@ public class PersonalBaselineService {
                 analysisYearMonth,
                 now
         );
-        try {
-            return consumerBaselineRepository.saveAndFlush(created);
-        } catch (DataIntegrityViolationException exception) {
-            ConsumerBaseline concurrentBaseline = consumerBaselineRepository
-                    .findByMemberIdAndAnalysisYearMonth(memberId, analysisYearMonth)
-                    .orElseThrow(() -> exception);
-            concurrentBaseline.update(
-                    personal.avgSpending(),
-                    personal.essentialRatio(),
-                    personal.normalRatio(),
-                    personal.discretionaryRatio(),
-                    personal.riskRatio(),
-                    personal.volatility(),
-                    volatilityIndex,
-                    analysisYearMonth,
-                    now
-            );
-            return concurrentBaseline;
-        }
+        return consumerBaselineRepository.findByMemberIdAndAnalysisYearMonth(memberId, analysisYearMonth)
+                .orElseThrow(() -> new IllegalStateException("개인 소비 baseline 저장 후 조회에 실패했습니다."));
     }
 
     private void saveOrUpdateConsumerMonthlyAnalysis(Long memberId, LocalDate today, ConsumerBaseline baseline) {
@@ -292,27 +254,7 @@ public class PersonalBaselineService {
         BigDecimal spendingDiffAmount = currentMonthSpending.subtract(sameDayAvgSpending).setScale(2, RoundingMode.HALF_UP);
         String spendingStatus = resolveSpendingStatus(currentMonthSpending, sameDayAvgSpending, spendingDiffAmount);
 
-        ConsumerMonthlyAnalysis analysis = consumerMonthlyAnalysisRepository
-                .findByMemberIdAndAnalysisYearMonth(memberId, analysisYearMonth)
-                .orElse(null);
-
-        if (analysis != null) {
-            analysis.update(
-                    currentMonthSpending,
-                    sameDayAvgSpending,
-                    spendingDiffAmount,
-                    spendingStatus,
-                    totalTransactionsCount,
-                    essentialTransactionsCount,
-                    discretionaryTransactionsCount,
-                    largestSpendingCategoryId,
-                    largestSpendingAmount,
-                    now
-            );
-            return;
-        }
-
-        ConsumerMonthlyAnalysis created = ConsumerMonthlyAnalysis.create(
+        consumerMonthlyAnalysisRepository.upsert(
                 memberId,
                 analysisYearMonth,
                 currentMonthSpending,
@@ -326,25 +268,6 @@ public class PersonalBaselineService {
                 largestSpendingAmount,
                 now
         );
-        try {
-            consumerMonthlyAnalysisRepository.saveAndFlush(created);
-        } catch (DataIntegrityViolationException exception) {
-            ConsumerMonthlyAnalysis concurrentAnalysis = consumerMonthlyAnalysisRepository
-                    .findByMemberIdAndAnalysisYearMonth(memberId, analysisYearMonth)
-                    .orElseThrow(() -> exception);
-            concurrentAnalysis.update(
-                    currentMonthSpending,
-                    sameDayAvgSpending,
-                    spendingDiffAmount,
-                    spendingStatus,
-                    totalTransactionsCount,
-                    essentialTransactionsCount,
-                    discretionaryTransactionsCount,
-                    largestSpendingCategoryId,
-                    largestSpendingAmount,
-                    now
-            );
-        }
     }
 
     private FinalBaselineResponse buildAgeOnlyResponse(Long memberId, int age, AgeGroupBaseline baseline, FinancialStatusResponse financialStatusResponse) {
