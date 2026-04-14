@@ -8,6 +8,7 @@ import com.nudgebank.bankbackend.card.domain.MarketCategory;
 import com.nudgebank.bankbackend.card.repository.CardTransactionRepository;
 import com.nudgebank.bankbackend.card.repository.MarketCategoryRepository;
 import com.nudgebank.bankbackend.card.repository.MarketRepository;
+import com.nudgebank.bankbackend.common.util.WonAmount;
 import com.nudgebank.bankbackend.loan.domain.Loan;
 import com.nudgebank.bankbackend.loan.domain.LoanApplication;
 import com.nudgebank.bankbackend.loan.domain.LoanHistory;
@@ -39,7 +40,7 @@ public class LoanRepaymentService {
     private static final String CONSUMPTION_ANALYSIS_TYPE = "CONSUMPTION_ANALYSIS";
     private static final String YOUTH_LOAN_PRODUCT_KEY = "youth-loan";
     private static final String CONSUMPTION_LOAN_PRODUCT_KEY = "consumption-loan";
-    private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+    private static final BigDecimal ZERO = BigDecimal.ZERO;
     private static final BigDecimal OVERDUE_SPREAD = new BigDecimal("3.0");
     private static final BigDecimal MAX_OVERDUE_RATE = new BigDecimal("15.0");
     private static final String REPAYMENT_CATEGORY_NAME = "대출상환";
@@ -72,7 +73,7 @@ public class LoanRepaymentService {
 
         Account sourceAccount = accountRepository.findByIdForUpdate(resolvedLoan.loanHistory().getCard().getAccountId())
             .orElseThrow(() -> new EntityNotFoundException("상환 계좌를 찾을 수 없습니다."));
-        sourceAccount.withdraw(repaymentAmount);
+        sourceAccount.withdraw(won(repaymentAmount));
 
         AppliedRepayment appliedRepayment = applyRepayment(
             resolvedLoan.loanHistory(),
@@ -87,29 +88,29 @@ public class LoanRepaymentService {
             .market(resolveRepaymentMarket())
             .qrId(generateRepaymentQrId())
             .category(resolveRepaymentCategory())
-            .amount(appliedRepayment.totalPaid())
+            .amount(won(appliedRepayment.totalPaid()))
             .transactionDatetime(OffsetDateTime.now())
             .menuName(resolveManualRepaymentMenuName(resolvedLoan.loan()))
             .quantity(1)
             .build());
 
+        syncLoanHistoryStatus(resolvedLoan.loanHistory(), resolvedLoan.loan());
+
         loanRepaymentHistoryRepository.save(LoanRepaymentHistory.create(
             resolvedLoan.loanHistory(),
             transaction,
-            appliedRepayment.totalPaid(),
+            won(appliedRepayment.totalPaid()),
             BigDecimal.ZERO,
             OffsetDateTime.now(),
-            nullSafe(resolvedLoan.loanHistory().getRemainingPrincipal())
+            won(resolvedLoan.loanHistory().getRemainingPrincipal())
         ));
 
-        syncLoanHistoryStatus(resolvedLoan.loanHistory(), resolvedLoan.loan());
-
         return new LoanRepaymentExecuteResponse(
-            appliedRepayment.totalPaid(),
-            appliedRepayment.principalPaid(),
-            appliedRepayment.interestPaid(),
-            appliedRepayment.overdueInterestPaid(),
-            nullSafe(resolvedLoan.loanHistory().getRemainingPrincipal()),
+            won(appliedRepayment.totalPaid()),
+            won(appliedRepayment.principalPaid()),
+            won(appliedRepayment.interestPaid()),
+            won(appliedRepayment.overdueInterestPaid()),
+            won(resolvedLoan.loanHistory().getRemainingPrincipal()),
             resolvedLoan.loanHistory().getStatus(),
             false,
             "MANUAL_COMPLETED",
@@ -124,7 +125,7 @@ public class LoanRepaymentService {
         BigDecimal requestedAmount,
         boolean applyOverdueInterest
     ) {
-        BigDecimal remainingAmount = requestedAmount;
+        BigDecimal remainingAmount = won(requestedAmount);
         BigDecimal paidPrincipal = ZERO;
         BigDecimal paidInterest = ZERO;
         BigDecimal paidOverdueInterest = ZERO;
@@ -188,10 +189,10 @@ public class LoanRepaymentService {
         }
 
         return new AppliedRepayment(
-            paidPrincipal.add(paidInterest),
-            paidPrincipal,
-            paidInterest,
-            paidOverdueInterest
+            won(paidPrincipal.add(paidInterest)),
+            won(paidPrincipal),
+            won(paidInterest),
+            won(paidOverdueInterest)
         );
     }
 
@@ -238,7 +239,7 @@ public class LoanRepaymentService {
             );
             total = total.add(unpaidPrincipal).add(unpaidInterest).add(overdueInterest);
         }
-        return total.setScale(2, RoundingMode.HALF_UP);
+        return total.setScale(0, RoundingMode.DOWN);
     }
 
     private List<RepaymentSchedule> resolveTargetSchedules(LoanHistory loanHistory, Loan loan) {
@@ -349,10 +350,14 @@ public class LoanRepaymentService {
             BigDecimal plannedInterest = remainingPrincipal
                 .multiply(nullSafe(loan.getInterestRate()))
                 .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
-                .divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
+                .divide(BigDecimal.valueOf(12), 10, RoundingMode.HALF_UP)
+                .setScale(0, RoundingMode.DOWN);
             BigDecimal plannedPrincipal = remainingUntouchedSchedules == 1
                 ? remainingPrincipal
-                : monthlyPayment.subtract(plannedInterest).max(BigDecimal.ZERO);
+                : monthlyPayment.subtract(plannedInterest).max(BigDecimal.ZERO).min(remainingPrincipal);
+
+            plannedPrincipal = floorWon(plannedPrincipal);
+            plannedInterest = floorWon(plannedInterest);
 
             if (nullSafe(schedule.getPlannedPrincipal()).compareTo(plannedPrincipal) != 0
                 || nullSafe(schedule.getPlannedInterest()).compareTo(plannedInterest) != 0) {
@@ -386,14 +391,16 @@ public class LoanRepaymentService {
             .divide(BigDecimal.valueOf(12), 10, RoundingMode.HALF_UP);
 
         if (monthlyRate.compareTo(BigDecimal.ZERO) == 0) {
-            return principalAmount.divide(BigDecimal.valueOf(repaymentMonths), 2, RoundingMode.HALF_UP);
+            return principalAmount.divide(BigDecimal.valueOf(repaymentMonths), 0, RoundingMode.DOWN);
         }
 
         BigDecimal factor = BigDecimal.ONE.add(monthlyRate).pow(repaymentMonths);
         BigDecimal numerator = principalAmount.multiply(monthlyRate).multiply(factor);
         BigDecimal denominator = factor.subtract(BigDecimal.ONE);
 
-        return numerator.divide(denominator, 2, RoundingMode.HALF_UP);
+        return numerator
+            .divide(denominator, 10, RoundingMode.HALF_UP)
+            .setScale(0, RoundingMode.DOWN);
     }
 
     private BigDecimal sumRemainingPrincipal(List<RepaymentSchedule> schedules) {
@@ -401,7 +408,7 @@ public class LoanRepaymentService {
             .map(RepaymentSchedule::getRemainingPlannedPrincipal)
             .map(this::nullSafe)
             .reduce(ZERO, BigDecimal::add)
-            .setScale(2, RoundingMode.HALF_UP);
+            .setScale(0, RoundingMode.DOWN);
     }
 
     private boolean isConsumptionAnalysisLoan(Loan loan) {
@@ -431,7 +438,7 @@ public class LoanRepaymentService {
             return payableAmount;
         }
 
-        BigDecimal normalized = requestedAmount.setScale(2, RoundingMode.HALF_UP);
+        BigDecimal normalized = won(requestedAmount);
         if (normalized.compareTo(BigDecimal.ZERO) <= 0) {
             return ZERO;
         }
@@ -463,7 +470,8 @@ public class LoanRepaymentService {
             .multiply(overdueRate)
             .divide(new BigDecimal("100"), 10, RoundingMode.HALF_UP)
             .multiply(BigDecimal.valueOf(overdueDays))
-            .divide(BigDecimal.valueOf(365), 2, RoundingMode.HALF_UP);
+            .divide(BigDecimal.valueOf(365), 10, RoundingMode.HALF_UP)
+            .setScale(0, RoundingMode.DOWN);
     }
 
     private BigDecimal availableBalance(Account account) {
@@ -491,6 +499,14 @@ public class LoanRepaymentService {
 
     private BigDecimal nullSafe(BigDecimal value) {
         return value != null ? value : ZERO;
+    }
+
+    private BigDecimal floorWon(BigDecimal value) {
+        return nullSafe(value).setScale(0, RoundingMode.DOWN);
+    }
+
+    private BigDecimal won(BigDecimal value) {
+        return WonAmount.floor(value);
     }
 
     private record ResolvedLoan(Loan loan, LoanHistory loanHistory) {}

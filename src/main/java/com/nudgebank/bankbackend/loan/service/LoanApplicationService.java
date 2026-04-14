@@ -280,7 +280,7 @@ public class LoanApplicationService {
             : LocalDate.now();
         int repaymentMonths = resolveRepaymentMonths(loanApplication);
         LocalDate endDate = startDate.plusMonths(repaymentMonths);
-        BigDecimal principalAmount = nullSafe(loanApplication.getLoanAmount());
+        BigDecimal principalAmount = floorWon(nullSafe(loanApplication.getLoanAmount()));
         BigDecimal interestRate = resolveInitialInterestRate(loanApplication.getLoanProduct());
 
         // loan 저장
@@ -398,23 +398,23 @@ public class LoanApplicationService {
 
         for (int month = 1; month <= repaymentMonths; month++) {
             BigDecimal plannedPrincipal;
-            BigDecimal plannedInterest = remainingPrincipal
-                .multiply(annualInterestRate)
-                .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
-                .divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
+            BigDecimal plannedInterest = calculateMonthlyInterestWon(remainingPrincipal, annualInterestRate);
             if (maturityLumpSum) {
-                plannedPrincipal = month == repaymentMonths ? principalAmount : BigDecimal.ZERO;
+                plannedPrincipal = month == repaymentMonths ? remainingPrincipal : BigDecimal.ZERO;
             } else if (equalInstallment) {
                 plannedPrincipal = month == repaymentMonths
-                    ? principalAmount.subtract(allocatedPrincipal)
-                    : monthlyPayment.subtract(plannedInterest).max(BigDecimal.ZERO);
+                    ? remainingPrincipal
+                    : monthlyPayment.subtract(plannedInterest).max(BigDecimal.ZERO).min(remainingPrincipal);
             } else {
                 BigDecimal monthlyPrincipal = principalAmount
-                    .divide(BigDecimal.valueOf(repaymentMonths), 2, RoundingMode.DOWN);
+                    .divide(BigDecimal.valueOf(repaymentMonths), 0, RoundingMode.DOWN);
                 plannedPrincipal = month == repaymentMonths
-                    ? principalAmount.subtract(allocatedPrincipal)
+                    ? remainingPrincipal
                     : monthlyPrincipal;
             }
+
+            plannedPrincipal = floorWon(plannedPrincipal);
+            plannedInterest = floorWon(plannedInterest);
 
             schedules.add(
                 RepaymentSchedule.create(
@@ -449,14 +449,16 @@ public class LoanApplicationService {
             .divide(BigDecimal.valueOf(12), 10, RoundingMode.HALF_UP);
 
         if (monthlyRate.compareTo(BigDecimal.ZERO) == 0) {
-            return principalAmount.divide(BigDecimal.valueOf(repaymentMonths), 2, RoundingMode.HALF_UP);
+            return principalAmount.divide(BigDecimal.valueOf(repaymentMonths), 0, RoundingMode.DOWN);
         }
 
         BigDecimal factor = BigDecimal.ONE.add(monthlyRate).pow(repaymentMonths);
         BigDecimal numerator = principalAmount.multiply(monthlyRate).multiply(factor);
         BigDecimal denominator = factor.subtract(BigDecimal.ONE);
 
-        return numerator.divide(denominator, 2, RoundingMode.HALF_UP);
+        return numerator
+            .divide(denominator, 10, RoundingMode.HALF_UP)
+            .setScale(0, RoundingMode.DOWN);
     }
 
     private int resolveRepaymentMonths(LoanApplication loanApplication) {
@@ -529,6 +531,18 @@ public class LoanApplicationService {
 
     private BigDecimal nullSafe(BigDecimal value) {
         return value != null ? value : BigDecimal.ZERO;
+    }
+
+    private BigDecimal floorWon(BigDecimal value) {
+        return nullSafe(value).setScale(0, RoundingMode.DOWN);
+    }
+
+    private BigDecimal calculateMonthlyInterestWon(BigDecimal principalAmount, BigDecimal annualInterestRate) {
+        return nullSafe(principalAmount)
+            .multiply(nullSafe(annualInterestRate))
+            .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
+            .divide(BigDecimal.valueOf(12), 10, RoundingMode.HALF_UP)
+            .setScale(0, RoundingMode.DOWN);
     }
 
     private BigDecimal requireInterestRate(LoanProduct loanProduct, boolean baseRate) {

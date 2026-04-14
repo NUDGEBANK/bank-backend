@@ -6,6 +6,7 @@ import com.nudgebank.bankbackend.auth.repository.MemberRepository;
 import com.nudgebank.bankbackend.card.domain.Card;
 import com.nudgebank.bankbackend.card.domain.CardTransaction;
 import com.nudgebank.bankbackend.card.repository.CardTransactionRepository;
+import com.nudgebank.bankbackend.common.util.WonAmount;
 import com.nudgebank.bankbackend.finance.dto.FinancialStatusResponse;
 import com.nudgebank.bankbackend.loan.domain.LoanApplication;
 import com.nudgebank.bankbackend.loan.domain.LoanHistory;
@@ -53,7 +54,7 @@ public class FinancialStatusService {
 
         validateTransactionOwnership(memberId, account);
 
-        BigDecimal linkedAccountBalance = nullSafe(account.getBalance());
+        BigDecimal linkedAccountBalance = won(account.getBalance());
         BigDecimal availableBalance = linkedAccountBalance;
 
         List<LoanHistory> openLoanHistories = loanHistoryRepository
@@ -65,14 +66,15 @@ public class FinancialStatusService {
         BigDecimal totalLoanRemainingPrincipal = openLoanHistories.stream()
                 .map(LoanHistory::getRemainingPrincipal)
                 .map(this::nullSafe)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(0, java.math.RoundingMode.DOWN);
 
         LoanApplication latestLoanApplication = loanApplicationRepository
                 .findTopByMember_MemberIdOrderByAppliedAtDesc(memberId)
                 .orElse(null);
 
         BigDecimal monthlyIncome = latestLoanApplication != null
-                ? nullSafe(latestLoanApplication.getMonthlyIncome())
+                ? won(latestLoanApplication.getMonthlyIncome())
                 : BigDecimal.ZERO;
 
         Integer salaryDate = latestLoanApplication != null
@@ -81,7 +83,7 @@ public class FinancialStatusService {
 
         Integer daysUntilPaymentDue = calculateDaysUntilPaymentDue(resolveNearestDueLoan(openLoanHistories));
 
-        BigDecimal currentMonthSpendingAmount = nullSafe(
+        BigDecimal currentMonthSpendingAmount = won(
                 cardTransactionRepository.sumCurrentMonthSpendingAmountUntilTransaction(
                         card.getCardId(),
                         getStartOfMonth(transaction.getTransactionDatetime()),
@@ -166,5 +168,9 @@ public class FinancialStatusService {
 
     private BigDecimal nullSafe(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
+    }
+
+    private BigDecimal won(BigDecimal value) {
+        return WonAmount.floor(value);
     }
 }

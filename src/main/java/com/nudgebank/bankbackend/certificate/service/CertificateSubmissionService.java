@@ -195,7 +195,8 @@ public class CertificateSubmissionService {
             BigDecimal plannedInterest = remainingPrincipal
                     .multiply(annualInterestRate)
                     .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
-                    .divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
+                    .divide(BigDecimal.valueOf(12), 10, RoundingMode.HALF_UP)
+                    .setScale(0, RoundingMode.DOWN);
 
             schedule.updatePlannedInterest(plannedInterest);
             remainingPrincipal = remainingPrincipal.subtract(nullSafe(schedule.getPlannedPrincipal())).max(BigDecimal.ZERO);
