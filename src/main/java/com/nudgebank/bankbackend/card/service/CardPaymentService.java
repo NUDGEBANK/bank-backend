@@ -12,15 +12,15 @@ import com.nudgebank.bankbackend.card.repository.CardRepository;
 import com.nudgebank.bankbackend.card.repository.CardTransactionRepository;
 import com.nudgebank.bankbackend.card.repository.MarketCategoryRepository;
 import com.nudgebank.bankbackend.card.repository.MarketRepository;
-import com.nudgebank.bankbackend.finance.service.AutoRepaymentExecutionService.AutoRepaymentExecutionResult;
+import com.nudgebank.bankbackend.common.util.WonAmount;
 import com.nudgebank.bankbackend.finance.service.AutoRepaymentExecutionService;
+import com.nudgebank.bankbackend.finance.service.AutoRepaymentExecutionService.AutoRepaymentExecutionResult;
 import jakarta.persistence.EntityNotFoundException;
+import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.math.BigDecimal;
-import java.time.OffsetDateTime;
 
 @Service
 @RequiredArgsConstructor
@@ -38,38 +38,31 @@ public class CardPaymentService {
         validateRequest(request);
 
         Card card = cardRepository.findById(request.cardId())
-                .orElseThrow(() -> new EntityNotFoundException(
-                        "카드를 찾을 수 없습니다. cardId=" + request.cardId()
-                ));
+                .orElseThrow(() -> new EntityNotFoundException("카드를 찾을 수 없습니다. cardId=" + request.cardId()));
 
         Account account = accountRepository.findByIdForUpdate(card.getAccountId())
-                .orElseThrow(() -> new EntityNotFoundException(
-                        "카드에 연결된 계좌를 찾을 수 없습니다. accountId=" + card.getAccountId()
-                ));
+                .orElseThrow(() -> new EntityNotFoundException("카드에 연결된 계좌를 찾을 수 없습니다. accountId=" + card.getAccountId()));
 
         Market market = marketRepository.findById(request.marketId())
-                .orElseThrow(() -> new EntityNotFoundException(
-                        "가맹점을 찾을 수 없습니다. marketId=" + request.marketId()
-                ));
+                .orElseThrow(() -> new EntityNotFoundException("가맹점을 찾을 수 없습니다. marketId=" + request.marketId()));
 
         MarketCategory category = marketCategoryRepository.findById(request.categoryId())
-                .orElseThrow(() -> new EntityNotFoundException(
-                        "카테고리를 찾을 수 없습니다. categoryId=" + request.categoryId()
-                ));
+                .orElseThrow(() -> new EntityNotFoundException("카테고리를 찾을 수 없습니다. categoryId=" + request.categoryId()));
 
-        BigDecimal balance = nullSafe(account.getBalance());
-        if (balance.compareTo(request.amount()) < 0) {
+        BigDecimal paymentAmount = won(request.amount());
+        BigDecimal balance = won(account.getBalance());
+        if (balance.compareTo(paymentAmount) < 0) {
             throw new IllegalArgumentException("잔액이 부족합니다.");
         }
 
-        account.withdraw(request.amount());
+        account.withdraw(paymentAmount);
 
         CardTransaction transaction = CardTransaction.builder()
                 .card(card)
                 .market(market)
                 .category(category)
                 .qrId(request.qrId())
-                .amount(request.amount())
+                .amount(paymentAmount)
                 .transactionDatetime(OffsetDateTime.now())
                 .menuName(request.menuName())
                 .quantity(request.quantity())
@@ -83,17 +76,19 @@ public class CardPaymentService {
             autoRepaymentResult = AutoRepaymentExecutionResult.failed();
         }
 
-        BigDecimal totalDebitedAmount = request.amount().add(autoRepaymentResult.repaymentAmount());
+        BigDecimal repaymentAmount = won(autoRepaymentResult.repaymentAmount());
+        BigDecimal remainingLoanBalance = won(autoRepaymentResult.remainingLoanBalance());
+        BigDecimal totalDebitedAmount = won(paymentAmount.add(repaymentAmount));
 
         return CardPaymentResponse.builder()
                 .transactionId(saved.getTransactionId())
-                .paymentAmount(request.amount())
+                .paymentAmount(paymentAmount)
                 .autoRepaymentApplied(autoRepaymentResult.autoRepaymentApplied())
                 .repaymentAction(autoRepaymentResult.repaymentAction())
                 .policyGrade(autoRepaymentResult.policyGrade())
                 .repaymentRate(autoRepaymentResult.repaymentRate())
-                .repaymentAmount(autoRepaymentResult.repaymentAmount())
-                .remainingLoanBalance(autoRepaymentResult.remainingLoanBalance())
+                .repaymentAmount(repaymentAmount)
+                .remainingLoanBalance(remainingLoanBalance)
                 .totalDebitedAmount(totalDebitedAmount)
                 .build();
     }
@@ -119,7 +114,7 @@ public class CardPaymentService {
         }
     }
 
-    private BigDecimal nullSafe(BigDecimal value) {
-        return value == null ? BigDecimal.ZERO : value;
+    private BigDecimal won(BigDecimal value) {
+        return WonAmount.floor(value);
     }
 }
