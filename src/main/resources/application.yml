@@ -34,3 +34,4 @@ ai:
   pipeline:
     python-command: ${NUDGEBANK_AI_PYTHON:.venv/bin/python}
     working-dir: ${NUDGEBANK_AI_WORKDIR:../nudgebank-ai}
+    timeout-seconds: ${NUDGEBANK_AI_TIMEOUT_SECONDS:120}

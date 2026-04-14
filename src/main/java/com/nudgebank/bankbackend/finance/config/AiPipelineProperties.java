@@ -5,6 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "ai.pipeline")
 public record AiPipelineProperties(
         String pythonCommand,
-        String workingDir
+        String workingDir,
+        long timeoutSeconds
 ) {
 }

@@ -12,6 +12,12 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 @Service
 @RequiredArgsConstructor
@@ -46,10 +52,27 @@ public class ConsumptionPredictionPipelineService {
         processBuilder.directory(new File(aiPipelineProperties.workingDir()));
         processBuilder.redirectErrorStream(true);
 
+        ExecutorService outputReaderExecutor = Executors.newSingleThreadExecutor();
         try {
             Process process = processBuilder.start();
-            String output = readOutput(process);
-            int exitCode = process.waitFor();
+            Future<String> outputFuture = outputReaderExecutor.submit(() -> readOutput(process));
+
+            boolean finished = process.waitFor(aiPipelineProperties.timeoutSeconds(), TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroy();
+                if (!process.waitFor(5, TimeUnit.SECONDS)) {
+                    process.destroyForcibly();
+                    process.waitFor(5, TimeUnit.SECONDS);
+                }
+
+                throw new IllegalStateException(
+                        "AI pipeline command timed out after %d seconds. command=%s"
+                                .formatted(aiPipelineProperties.timeoutSeconds(), String.join(" ", command))
+                );
+            }
+
+            int exitCode = process.exitValue();
+            String output = getOutput(outputFuture, command);
 
             if (exitCode != 0) {
                 throw new IllegalStateException(
@@ -65,6 +88,24 @@ public class ConsumptionPredictionPipelineService {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(
                     "AI pipeline command interrupted: " + String.join(" ", command),
+                    e
+            );
+        } finally {
+            outputReaderExecutor.shutdownNow();
+        }
+    }
+
+    private String getOutput(Future<String> outputFuture, List<String> command) throws InterruptedException {
+        try {
+            return outputFuture.get(5, TimeUnit.SECONDS);
+        } catch (ExecutionException e) {
+            throw new IllegalStateException(
+                    "Failed to read AI pipeline output: " + String.join(" ", command),
+                    e.getCause()
+            );
+        } catch (TimeoutException e) {
+            throw new IllegalStateException(
+                    "Timed out while reading AI pipeline output: " + String.join(" ", command),
                     e
             );
         }
