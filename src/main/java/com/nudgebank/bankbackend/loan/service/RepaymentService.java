@@ -48,9 +48,9 @@ public class RepaymentService {
         return result;
     }
 
-    public RepaymentResult repay(LoanHistory loanHistory, Loan loan, BigDecimal requestedAmount) {
+    public RepaymentResult repay(LoanHistory loanHistory, Loan loan, BigDecimal requestedAmount, CardTransaction transaction) {
         RepaymentResult result = applyRepayment(loanHistory, loan, requestedAmount);
-        saveRepaymentHistoryIfApplied(loanHistory, null, null, result);
+        saveRepaymentHistoryIfApplied(loanHistory, transaction, null, result);
         return result;
     }
 
@@ -165,11 +165,13 @@ public class RepaymentService {
             return;
         }
 
+        repaymentRate = result.totalPaid().divide(transaction.getAmount(), 4, RoundingMode.HALF_UP);
+
         loanRepaymentHistoryRepository.save(LoanRepaymentHistory.create(
                 loanHistory,
                 transaction,
                 won(result.totalPaid()),
-                nullSafe(repaymentRate),
+                repaymentRate,
                 OffsetDateTime.now(),
                 won(result.remainingPrincipal())
         ));
