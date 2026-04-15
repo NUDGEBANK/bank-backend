@@ -1,6 +1,7 @@
 package com.nudgebank.bankbackend.loan.controller;
 
 import com.nudgebank.bankbackend.auth.security.SecurityUtil;
+import com.nudgebank.bankbackend.loan.dto.CompletedLoanHistoryResponse;
 import com.nudgebank.bankbackend.loan.dto.MyLoanRepaymentHistoryResponse;
 import com.nudgebank.bankbackend.loan.dto.MyLoanRepaymentScheduleResponse;
 import com.nudgebank.bankbackend.loan.dto.MyLoanSummaryResponse;
@@ -13,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -62,6 +64,51 @@ public class MyLoanManagementController {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         }
         return myLoanManagementService.getRepaymentHistories(memberId, productKey);
+    }
+
+    @GetMapping("/completed")
+    public List<CompletedLoanHistoryResponse> getCompletedLoans(Authentication authentication) {
+        Long memberId = SecurityUtil.extractUserId(authentication);
+        if (memberId == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        }
+        return myLoanManagementService.getCompletedLoans(memberId);
+    }
+
+    @GetMapping("/completed/{loanHistoryId}/summary")
+    public MyLoanSummaryResponse getCompletedLoanSummary(
+        Authentication authentication,
+        @PathVariable Long loanHistoryId
+    ) {
+        Long memberId = SecurityUtil.extractUserId(authentication);
+        if (memberId == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        }
+        return myLoanManagementService.getCompletedLoanSummary(memberId, loanHistoryId);
+    }
+
+    @GetMapping("/completed/{loanHistoryId}/repayment-schedules")
+    public List<MyLoanRepaymentScheduleResponse> getCompletedRepaymentSchedules(
+        Authentication authentication,
+        @PathVariable Long loanHistoryId
+    ) {
+        Long memberId = SecurityUtil.extractUserId(authentication);
+        if (memberId == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        }
+        return myLoanManagementService.getCompletedRepaymentSchedules(memberId, loanHistoryId);
+    }
+
+    @GetMapping("/completed/{loanHistoryId}/repayment-histories")
+    public List<MyLoanRepaymentHistoryResponse> getCompletedRepaymentHistories(
+        Authentication authentication,
+        @PathVariable Long loanHistoryId
+    ) {
+        Long memberId = SecurityUtil.extractUserId(authentication);
+        if (memberId == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        }
+        return myLoanManagementService.getCompletedRepaymentHistories(memberId, loanHistoryId);
     }
 
     @PostMapping("/repayments")

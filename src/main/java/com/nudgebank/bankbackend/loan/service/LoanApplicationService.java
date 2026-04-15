@@ -85,11 +85,7 @@ public class LoanApplicationService {
         LoanProduct loanProduct = loanProductRepository.findByLoanProductType(loanProductType)
                 .orElseThrow(() -> new EntityNotFoundException("대출 상품을 찾을 수 없습니다. type=" + loanProductType));
 
-        boolean alreadyApplied = loanApplicationRepository
-                .findAllByMember_MemberIdOrderByAppliedAtDesc(member.getMemberId())
-                .stream()
-                .anyMatch(application -> loanProductType.equals(application.getLoanProduct().getLoanProductType())
-                        && application.getApplicationStatus() != LoanApplicationStatus.REJECTED);
+        boolean alreadyApplied = hasOngoingApplication(member.getMemberId(), loanProductType);
 
         if (alreadyApplied) {
             throw new IllegalArgumentException("이미 진행 중이거나 승인된 동일 상품 신청이 있습니다.");
@@ -202,10 +198,7 @@ public class LoanApplicationService {
         LoanProduct loanProduct = loanProductRepository.findByLoanProductType(loanProductType)
             .orElseThrow(() -> new EntityNotFoundException("대출 상품을 찾을 수 없습니다. type=" + loanProductType));
 
-        boolean alreadyApplied = loanApplicationRepository
-            .findAllByMember_MemberIdOrderByAppliedAtDesc(member.getMemberId())
-            .stream()
-            .anyMatch(application -> loanProductType.equals(application.getLoanProduct().getLoanProductType()));
+        boolean alreadyApplied = hasOngoingApplication(member.getMemberId(), loanProductType);
         if (alreadyApplied) {
             throw new IllegalArgumentException("이미 신청이 완료된 상품입니다. 내 대출 관리에서 진행 상태를 확인해 주세요.");
         }
@@ -267,6 +260,38 @@ public class LoanApplicationService {
     }
 
     // 대출 실행
+    private boolean hasOngoingApplication(Long memberId, String loanProductType) {
+        return loanApplicationRepository.findAllByMember_MemberIdOrderByAppliedAtDesc(memberId).stream()
+            .filter(application -> loanProductType.equals(application.getLoanProduct().getLoanProductType()))
+            .anyMatch(this::isApplicationStillInProgress);
+    }
+
+    private boolean isApplicationStillInProgress(LoanApplication application) {
+        if (application.getApplicationStatus() == LoanApplicationStatus.REJECTED) {
+            return false;
+        }
+        if (application.getApplicationStatus() == LoanApplicationStatus.PENDING) {
+            return true;
+        }
+
+        Loan loan = loanRepository.findTopByLoanApplication_IdOrderByIdDesc(application.getId()).orElse(null);
+        if (loan == null || application.getCard() == null) {
+            return true;
+        }
+
+        LoanHistory loanHistory = loanHistoryRepository
+            .findTopByMember_MemberIdAndCard_CardIdAndTotalPrincipalAndStartDateAndEndDateOrderByCreatedAtDesc(
+                application.getMember().getMemberId(),
+                application.getCard().getCardId(),
+                nullSafe(loan.getPrincipalAmount()),
+                loan.getStartDate(),
+                loan.getEndDate()
+            )
+            .orElse(null);
+
+        return loanHistory == null || !"COMPLETED".equals(loanHistory.getStatus());
+    }
+
     private void createLoanExecution(LoanApplication loanApplication, Account repaymentAccount) {
         Card card = loanApplication.getCard();
 
