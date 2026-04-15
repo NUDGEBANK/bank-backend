@@ -101,7 +101,7 @@ public class AutoRepaymentExecutionService {
             return;
         }
 
-        RepaymentService.RepaymentResult result = repaymentService.repay(resolvedLoan.loanHistory(), resolvedLoan.loan(), repaymentAmount);
+        RepaymentService.RepaymentResult result = repaymentService.repay(resolvedLoan.loanHistory(), resolvedLoan.loan(), repaymentAmount, transaction);
         log.info("실제 자동 상환 금액 : " + result.totalPaid());
         if (result.totalPaid().compareTo(BigDecimal.ZERO) > 0) {
             log.info("차감할게요 : " + result.totalPaid());
