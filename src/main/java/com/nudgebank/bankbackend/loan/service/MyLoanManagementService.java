@@ -6,6 +6,7 @@ import com.nudgebank.bankbackend.card.domain.CardTransaction;
 import com.nudgebank.bankbackend.certificate.repository.CertificateMasterRepository;
 import com.nudgebank.bankbackend.certificate.repository.CertificateSubmissionRepository;
 import com.nudgebank.bankbackend.common.util.WonAmount;
+import com.nudgebank.bankbackend.loan.dto.CompletedLoanHistoryResponse;
 import com.nudgebank.bankbackend.loan.domain.Loan;
 import com.nudgebank.bankbackend.loan.domain.LoanApplication;
 import com.nudgebank.bankbackend.loan.domain.LoanHistory;
@@ -178,6 +179,117 @@ public class MyLoanManagementService {
         );
     }
 
+    public List<CompletedLoanHistoryResponse> getCompletedLoans(Long memberId) {
+        return loanHistoryRepository.findAllByMember_MemberIdOrderByCreatedAtDesc(memberId).stream()
+            .filter(loanHistory -> "COMPLETED".equals(loanHistory.getStatus()))
+            .map(loanHistory -> {
+                Loan loan = resolveLoanForHistory(memberId, loanHistory)
+                    .orElseThrow(() -> new EntityNotFoundException("완납 대출 정보를 찾을 수 없습니다."));
+                LoanApplication application = loan.getLoanApplication();
+                return new CompletedLoanHistoryResponse(
+                    loanHistory.getId(),
+                    toProductKey(application.getLoanProduct().getLoanProductType()),
+                    application.getLoanProduct().getLoanProductName(),
+                    loanHistory.getStatus(),
+                    won(loanHistory.getTotalPrincipal()),
+                    nullSafe(loan.getInterestRate()),
+                    application.getLoanProduct().getRepaymentType(),
+                    loanHistory.getStartDate(),
+                    loanHistory.getEndDate()
+                );
+            })
+            .toList();
+    }
+
+    public MyLoanSummaryResponse getCompletedLoanSummary(Long memberId, Long loanHistoryId) {
+        LoanHistory loanHistory = loanHistoryRepository.findById(loanHistoryId)
+            .filter(history -> history.getMember().getMemberId().equals(memberId))
+            .filter(history -> "COMPLETED".equals(history.getStatus()))
+            .orElseThrow(() -> new EntityNotFoundException("완납 대출 이력을 찾을 수 없습니다."));
+
+        Loan loan = resolveLoanForHistory(memberId, loanHistory)
+            .orElseThrow(() -> new EntityNotFoundException("완납 대출 정보를 찾을 수 없습니다."));
+        LoanApplication application = loan.getLoanApplication();
+        List<RepaymentSchedule> schedules =
+            repaymentScheduleRepository.findAllByLoanHistory_IdOrderByDueDateAsc(loanHistory.getId());
+
+        BigDecimal totalPrincipal = nullSafe(loanHistory.getTotalPrincipal());
+        BigDecimal remainingPrincipal = nullSafe(loanHistory.getRemainingPrincipal());
+        BigDecimal repaidPrincipal = totalPrincipal.subtract(remainingPrincipal);
+        BigDecimal cumulativeInterest = schedules.stream()
+            .map(RepaymentSchedule::getPaidInterest)
+            .map(this::nullSafe)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal baseInterestRate = resolveBaseInterestRate(application);
+        BigDecimal minimumInterestRate = resolveMinimumInterestRate(application);
+        BigDecimal currentInterestRate = nullSafe(loan.getInterestRate());
+        BigDecimal preferentialRateDiscount = resolvePreferentialRateDiscount(
+            application.getId(),
+            baseInterestRate,
+            currentInterestRate
+        );
+
+        return new MyLoanSummaryResponse(
+            loanHistory.getId(),
+            loanHistory.getStatus(),
+            won(totalPrincipal),
+            won(remainingPrincipal),
+            won(repaidPrincipal.max(BigDecimal.ZERO)),
+            baseInterestRate,
+            minimumInterestRate,
+            preferentialRateDiscount,
+            currentInterestRate,
+            application.getLoanProduct().getRepaymentType(),
+            loanHistory.getStartDate(),
+            loanHistory.getEndDate(),
+            null,
+            BigDecimal.ZERO,
+            BigDecimal.ZERO,
+            BigDecimal.ZERO,
+            won(cumulativeInterest),
+            BigDecimal.ZERO,
+            loanHistory.getRepaymentAccountNumber()
+        );
+    }
+
+    public List<MyLoanRepaymentScheduleResponse> getCompletedRepaymentSchedules(Long memberId, Long loanHistoryId) {
+        LoanHistory loanHistory = loanHistoryRepository.findById(loanHistoryId)
+            .filter(history -> history.getMember().getMemberId().equals(memberId))
+            .filter(history -> "COMPLETED".equals(history.getStatus()))
+            .orElseThrow(() -> new EntityNotFoundException("완납 대출 이력을 찾을 수 없습니다."));
+
+        return repaymentScheduleRepository.findAllByLoanHistory_IdOrderByDueDateAsc(loanHistory.getId()).stream()
+            .map(schedule -> new MyLoanRepaymentScheduleResponse(
+                schedule.getScheduleId(),
+                schedule.getDueDate(),
+                won(schedule.getPlannedPrincipal()),
+                won(schedule.getPlannedInterest()),
+                won(schedule.getPaidPrincipal()),
+                won(schedule.getPaidInterest()),
+                Boolean.TRUE.equals(schedule.getIsSettled()),
+                resolveOverdueDays(schedule)
+            ))
+            .toList();
+    }
+
+    public List<MyLoanRepaymentHistoryResponse> getCompletedRepaymentHistories(Long memberId, Long loanHistoryId) {
+        LoanHistory loanHistory = loanHistoryRepository.findById(loanHistoryId)
+            .filter(history -> history.getMember().getMemberId().equals(memberId))
+            .filter(history -> "COMPLETED".equals(history.getStatus()))
+            .orElseThrow(() -> new EntityNotFoundException("완납 대출 이력을 찾을 수 없습니다."));
+
+        return loanRepaymentHistoryRepository
+            .findTop10ByLoanHistory_IdOrderByRepaymentDatetimeDesc(loanHistory.getId()).stream()
+            .map(history -> new MyLoanRepaymentHistoryResponse(
+                history.getRepaymentId(),
+                won(history.getRepaymentAmount()),
+                nullSafe(history.getRepaymentRate()),
+                history.getRepaymentDatetime(),
+                won(history.getRemainingBalance())
+            ))
+            .toList();
+    }
+
     private MyLoanSummaryResponse buildPendingLoanSummary(Long memberId, String productKey) {
         LoanApplication application = ensureDisplayableLoanExists(memberId, productKey);
         BigDecimal totalPrincipal = won(application.getLoanAmount());
@@ -294,6 +406,30 @@ public class MyLoanManagementService {
         }
 
         return java.util.Optional.empty();
+    }
+
+    private java.util.Optional<Loan> resolveLoanForHistory(Long memberId, LoanHistory loanHistory) {
+        BigDecimal normalizedPrincipalAmount = WonAmount.floor(loanHistory.getTotalPrincipal());
+
+        java.util.Optional<Loan> matchedLoan = loanRepository
+            .findTopByMember_MemberIdAndLoanApplication_Card_CardIdAndPrincipalAmountAndStartDateOrderByIdDesc(
+                memberId,
+                loanHistory.getCard().getCardId(),
+                normalizedPrincipalAmount,
+                loanHistory.getStartDate()
+            );
+        if (matchedLoan.isPresent()) {
+            return matchedLoan;
+        }
+
+        return loanRepository
+            .findTopByMember_MemberIdAndLoanApplication_Card_CardIdAndPrincipalAmountAndStartDateAndEndDateOrderByIdDesc(
+                memberId,
+                loanHistory.getCard().getCardId(),
+                normalizedPrincipalAmount,
+                loanHistory.getStartDate(),
+                loanHistory.getEndDate()
+            );
     }
 
     private BigDecimal resolveInitialInterestRate(LoanApplication application) {
@@ -596,6 +732,15 @@ public class MyLoanManagementService {
             case "consumption-loan" -> CONSUMPTION_ANALYSIS_TYPE;
             case "situate-loan" -> EMERGENCY_TYPE;
             default -> throw new IllegalArgumentException("지원하지 않는 상품입니다. productKey=" + productKey);
+        };
+    }
+
+    private String toProductKey(String loanProductType) {
+        return switch (loanProductType) {
+            case SELF_DEVELOPMENT_TYPE -> "youth-loan";
+            case CONSUMPTION_ANALYSIS_TYPE -> "consumption-loan";
+            case EMERGENCY_TYPE -> "situate-loan";
+            default -> loanProductType;
         };
     }
 
