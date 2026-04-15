@@ -4,6 +4,7 @@ import com.nudgebank.bankbackend.auth.domain.Member;
 import com.nudgebank.bankbackend.auth.repository.MemberRepository;
 import com.nudgebank.bankbackend.certificate.domain.CertificateMaster;
 import com.nudgebank.bankbackend.certificate.domain.CertificateSubmission;
+import com.nudgebank.bankbackend.certificate.domain.CertificateVerificationStatus;
 import com.nudgebank.bankbackend.certificate.dto.CertificateMatchResult;
 import com.nudgebank.bankbackend.certificate.dto.CertificateSubmissionResponse;
 import com.nudgebank.bankbackend.certificate.repository.CertificateMasterRepository;
@@ -20,14 +21,14 @@ import com.nudgebank.bankbackend.loan.repository.RepaymentScheduleRepository;
 import com.nudgebank.bankbackend.ocr.client.OcrClient;
 import com.nudgebank.bankbackend.ocr.dto.OcrExtractResponse;
 import com.nudgebank.bankbackend.ocr.exception.InvalidCertificateUploadException;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.time.OffsetDateTime;
-import java.util.List;
 
 @Service
 public class CertificateSubmissionService {
@@ -75,15 +76,21 @@ public class CertificateSubmissionService {
         validateRequest(memberId, loanApplicationId, certificateId, file);
         validateDuplicateVerifiedCertificate(memberId, certificateId);
 
+        LoanApplication loanApplication = loanApplicationRepository.findByIdAndMember_MemberId(loanApplicationId, memberId)
+                .orElseThrow(() -> new InvalidCertificateUploadException("\uB300\uCD9C \uC2E0\uCCAD \uC815\uBCF4\uB97C \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4."));
+
         OcrExtractResponse ocrResponse = ocrClient.extract(file);
         OffsetDateTime submittedAt = OffsetDateTime.now();
         Member member = memberRepository.findById(memberId)
-                .orElseThrow(() -> new InvalidCertificateUploadException("Member not found"));
+                .orElseThrow(() -> new InvalidCertificateUploadException("\uD68C\uC6D0 \uC815\uBCF4\uB97C \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4."));
+
         CertificateMatchResult matchResult = certificateVerificationService.verify(
                 certificateId,
                 ocrResponse.extractedText(),
                 member
         );
+        LocalDate certificateDate = certificateVerificationService.extractCertificateDate(ocrResponse.extractedText());
+        matchResult = applyCertificateDateValidation(matchResult, loanApplication, certificateDate);
 
         CertificateSubmission submission = CertificateSubmission.builder()
                 .memberId(memberId)
@@ -97,7 +104,7 @@ public class CertificateSubmissionService {
                 .build();
 
         CertificateSubmission savedSubmission = certificateSubmissionRepository.save(submission);
-        if ("VERIFIED".equals(matchResult.verificationStatus().name())) {
+        if (CertificateVerificationStatus.VERIFIED.equals(matchResult.verificationStatus())) {
             applyPreferentialRate(loanApplicationId);
         }
 
@@ -121,18 +128,55 @@ public class CertificateSubmissionService {
             MultipartFile file
     ) {
         if (memberId == null || loanApplicationId == null || certificateId == null) {
-            throw new InvalidCertificateUploadException("memberId, loanApplicationId, certificateId are required");
+            throw new InvalidCertificateUploadException("memberId, loanApplicationId, certificateId\uB294 \uD544\uC218\uC785\uB2C8\uB2E4.");
         }
 
         if (file == null || file.isEmpty()) {
-            throw new InvalidCertificateUploadException("Certificate file is required");
+            throw new InvalidCertificateUploadException("\uC790\uACA9\uC99D \uD30C\uC77C\uC744 \uCCA8\uBD80\uD574 \uC8FC\uC138\uC694.");
         }
 
         LoanApplication loanApplication = loanApplicationRepository.findByIdAndMember_MemberId(loanApplicationId, memberId)
-            .orElseThrow(() -> new InvalidCertificateUploadException("대출 신청 정보를 찾을 수 없습니다."));
+                .orElseThrow(() -> new InvalidCertificateUploadException("\uB300\uCD9C \uC2E0\uCCAD \uC815\uBCF4\uB97C \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4."));
         if (!SELF_DEVELOPMENT_TYPE.equals(loanApplication.getLoanProduct().getLoanProductType())) {
-            throw new InvalidCertificateUploadException("자기계발 대출에만 자격증 우대금리를 적용할 수 있습니다.");
+            throw new InvalidCertificateUploadException("\uC790\uAE30\uACC4\uBC1C \uB300\uCD9C \uC2E0\uCCAD \uAC74\uC5D0\uC11C\uB9CC \uC790\uACA9\uC99D \uC778\uC99D\uC774 \uAC00\uB2A5\uD569\uB2C8\uB2E4.");
         }
+    }
+
+    private CertificateMatchResult applyCertificateDateValidation(
+            CertificateMatchResult matchResult,
+            LoanApplication loanApplication,
+            LocalDate certificateDate
+    ) {
+        if (!CertificateVerificationStatus.VERIFIED.equals(matchResult.verificationStatus())) {
+            return matchResult;
+        }
+
+        if (loanApplication.getAppliedAt() == null) {
+            return new CertificateMatchResult(
+                    CertificateVerificationStatus.VERIFICATION_FAILED,
+                    null,
+                    "LOAN_APPLICATION_DATE_NOT_FOUND"
+            );
+        }
+
+        if (certificateDate == null) {
+            return new CertificateMatchResult(
+                    CertificateVerificationStatus.VERIFICATION_FAILED,
+                    null,
+                    "CERTIFICATE_DATE_NOT_FOUND"
+            );
+        }
+
+        LocalDate applicationDate = loanApplication.getAppliedAt().toLocalDate();
+        if (certificateDate.isBefore(applicationDate)) {
+            return new CertificateMatchResult(
+                    CertificateVerificationStatus.VERIFICATION_FAILED,
+                    null,
+                    "CERTIFICATE_DATE_BEFORE_APPLICATION"
+            );
+        }
+
+        return matchResult;
     }
 
     private void validateDuplicateVerifiedCertificate(Long memberId, Long certificateId) {
@@ -144,15 +188,15 @@ public class CertificateSubmissionService {
                 );
 
         if (alreadyVerified) {
-            throw new IllegalArgumentException("이미 인증 완료된 자격증입니다.");
+            throw new IllegalArgumentException("\uC774\uBBF8 \uC778\uC99D \uC644\uB8CC\uB41C \uC790\uACA9\uC99D\uC785\uB2C8\uB2E4.");
         }
     }
 
     private void applyPreferentialRate(Long loanApplicationId) {
         LoanApplication loanApplication = loanApplicationRepository.findById(loanApplicationId)
-                .orElseThrow(() -> new InvalidCertificateUploadException("대출 신청 정보를 찾을 수 없습니다."));
+                .orElseThrow(() -> new InvalidCertificateUploadException("\uB300\uCD9C \uC2E0\uCCAD \uC815\uBCF4\uB97C \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4."));
         Loan loan = loanRepository.findTopByLoanApplication_IdOrderByIdDesc(loanApplicationId)
-                .orElseThrow(() -> new InvalidCertificateUploadException("대출 정보를 찾을 수 없습니다."));
+                .orElseThrow(() -> new InvalidCertificateUploadException("\uB300\uCD9C \uC815\uBCF4\uB97C \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4."));
 
         LoanHistory loanHistory = loanHistoryRepository
                 .findTopByMember_MemberIdAndCard_CardIdAndTotalPrincipalAndStartDateAndEndDateOrderByCreatedAtDesc(
@@ -162,13 +206,13 @@ public class CertificateSubmissionService {
                         loan.getStartDate(),
                         loan.getEndDate()
                 )
-                .orElseThrow(() -> new InvalidCertificateUploadException("대출 이력을 찾을 수 없습니다."));
+                .orElseThrow(() -> new InvalidCertificateUploadException("\uB300\uCD9C \uC774\uB825\uC744 \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4."));
 
         BigDecimal totalDiscount = certificateSubmissionRepository
                 .findAllByLoanApplicationIdAndVerificationStatus(loanApplicationId, "VERIFIED")
                 .stream()
                 .map(CertificateSubmission::getCertificateId)
-                .map(certificateId -> certificateMasterRepository.findByCertificateIdAndIsActiveTrue(certificateId)
+                .map(id -> certificateMasterRepository.findByCertificateIdAndIsActiveTrue(id)
                         .map(CertificateMaster::getRateDiscount)
                         .orElse(BigDecimal.ZERO))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -211,8 +255,9 @@ public class CertificateSubmissionService {
         BigDecimal rate = baseRate ? loanProduct.getMaxInterestRate() : loanProduct.getMinInterestRate();
         if (rate == null) {
             throw new IllegalStateException(
-                baseRate ? "대출 상품 기준 금리가 설정되지 않았습니다."
-                    : "대출 상품 최저 금리가 설정되지 않았습니다."
+                    baseRate
+                            ? "\uAE30\uC900 \uAE08\uB9AC\uAC00 \uC124\uC815\uB418\uC5B4 \uC788\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4."
+                            : "\uCD5C\uC800 \uAE08\uB9AC\uAC00 \uC124\uC815\uB418\uC5B4 \uC788\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4."
             );
         }
         return rate;
