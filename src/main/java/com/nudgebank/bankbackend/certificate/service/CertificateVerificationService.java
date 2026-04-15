@@ -307,7 +307,7 @@ public class CertificateVerificationService {
             return true;
         }
 
-        return hasAllowedNameMismatch(normalizedMemberName, normalizedDetectedName);
+        return hasLabelBasedNameMismatch(normalizedMemberName, normalizedDetectedName);
     }
 
     private boolean containsNameWithSingleCharacterMismatch(String extractedText, String normalizedMemberName) {
@@ -335,7 +335,7 @@ public class CertificateVerificationService {
                 .replaceAll("[^\\uAC00-\\uD7A3]", "");
     }
 
-    private boolean hasAllowedNameMismatch(String expected, String actual) {
+    private boolean hasLabelBasedNameMismatch(String expected, String actual) {
         int mismatchThreshold = expected.length() <= 3 ? 2 : 1;
         return hasCharacterMismatchWithinThreshold(expected, actual, mismatchThreshold);
     }
@@ -437,7 +437,6 @@ public class CertificateVerificationService {
                 .replace("\uD68C\uC7A5", "")
                 .replace("\uC774\uC0AC\uC7A5", "")
                 .replace("\uC7A5\uAD00", "")
-                .replace("\uC6D0", "")
                 .trim();
     }
 
