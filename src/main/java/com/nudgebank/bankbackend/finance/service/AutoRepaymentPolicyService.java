@@ -1,6 +1,7 @@
 package com.nudgebank.bankbackend.finance.service;
 
 import com.nudgebank.bankbackend.finance.dto.AutoRepaymentDecisionResponse;
+import com.nudgebank.bankbackend.finance.dto.BaseRatioReason;
 import com.nudgebank.bankbackend.finance.dto.FinalBaselineResponse;
 import com.nudgebank.bankbackend.finance.dto.FinancialStatusResponse;
 import lombok.RequiredArgsConstructor;
@@ -38,13 +39,13 @@ public class AutoRepaymentPolicyService {
             return buildBlockedResponse(transactionId, finalBaseline, financialStatus, "BLOCKED", "가용 잔액이 없어 자동상환을 보류합니다.");
         }
 
-        BigDecimal baseRatio = calculateBaseRepaymentRatio(finalBaseline);
-        PolicyOutcome policyOutcome = applyFinancialAdjustments(baseRatio, finalBaseline, financialStatus);
+        BaseRatioReason baseRatioReason = calculateBaseRepaymentRatio(finalBaseline);
+        PolicyOutcome policyOutcome = applyFinancialAdjustments(baseRatioReason, finalBaseline, financialStatus);
 
         return AutoRepaymentDecisionResponse.builder()
                 .memberId(memberId)
                 .transactionId(transactionId)
-                .baseRepaymentRatio(baseRatio)
+                .baseRepaymentRatio(baseRatioReason.getBaseRatio())
                 .finalRepaymentRatio(policyOutcome.finalRatio())
                 .repaymentAction(policyOutcome.action())
                 .policyGrade(policyOutcome.grade())
@@ -116,19 +117,24 @@ public class AutoRepaymentPolicyService {
                 .build();
     }
 
-    private BigDecimal calculateBaseRepaymentRatio(FinalBaselineResponse finalBaseline) {
+    private BaseRatioReason calculateBaseRepaymentRatio(FinalBaselineResponse finalBaseline) {
         BigDecimal ratio = new BigDecimal("0.03");
+        List<String> reasons = new ArrayList<>();
+        reasons.add("기본 자동상환 비율은 3%입니다.");
 
         if (nullSafe(finalBaseline.getEssentialRatio()).compareTo(new BigDecimal("0.60")) >= 0) {
             ratio = ratio.subtract(new BigDecimal("0.01"));
+            reasons.add("필수 소비 비율이 높아 1% 하향 조정합니다.");
         }
 
         if (nullSafe(finalBaseline.getDiscretionaryRatio()).compareTo(new BigDecimal("0.35")) >= 0) {
             ratio = ratio.add(new BigDecimal("0.01"));
+            reasons.add("선택 소비 비율이 높아 1% 상향 조정합니다.");
         }
 
         if (nullSafe(finalBaseline.getRiskRatio()).compareTo(new BigDecimal("0.20")) >= 0) {
             ratio = ratio.subtract(new BigDecimal("0.01"));
+            reasons.add("위험 소비 비율이 높아 1% 하향 조정합니다.");
         }
 
         BigDecimal avgSpending = resolvePolicyAvgSpending(finalBaseline);
@@ -137,21 +143,23 @@ public class AutoRepaymentPolicyService {
             BigDecimal volatilityRatio = volatility.divide(avgSpending, 4, RoundingMode.HALF_UP);
             if (volatilityRatio.compareTo(new BigDecimal("1.00")) >= 0) {
                 ratio = ratio.subtract(new BigDecimal("0.01"));
+                reasons.add("변동성이 높아 1% 하향 조정합니다.");
             } else if (volatilityRatio.compareTo(new BigDecimal("0.40")) <= 0) {
                 ratio = ratio.add(new BigDecimal("0.01"));
+                reasons.add("변동성이 낮아 1% 상향 조정합니다.");
             }
         }
 
-        return clamp(ratio, new BigDecimal("0.00"), new BigDecimal("0.10"));
+        return new BaseRatioReason(clamp(ratio, new BigDecimal("0.00"), new BigDecimal("0.10")), reasons);
     }
 
     private PolicyOutcome applyFinancialAdjustments(
-            BigDecimal baseRatio,
+            BaseRatioReason baseRatioReason,
             FinalBaselineResponse finalBaseline,
             FinancialStatusResponse financialStatus
     ) {
-        BigDecimal adjustedRatio = baseRatio;
-        List<String> reasons = new ArrayList<>();
+        BigDecimal adjustedRatio = baseRatioReason.getBaseRatio();
+        List<String> reasons = baseRatioReason.getReasons();
 
         BigDecimal availableBalance = nullSafe(financialStatus.getAvailableBalance());
         BigDecimal avgSpending = resolvePolicyAvgSpending(finalBaseline);
@@ -164,10 +172,10 @@ public class AutoRepaymentPolicyService {
             BigDecimal balanceCoverage = availableBalance.divide(avgSpending, 4, RoundingMode.HALF_UP);
             if (balanceCoverage.compareTo(new BigDecimal("1.50")) >= 0) {
                 adjustedRatio = adjustedRatio.add(new BigDecimal("0.02"));
-                reasons.add("가용 잔액이 평균 소비 대비 충분합니다");
+                reasons.add("가용 잔액이 평균 소비 대비 충분하여 2% 상향 조정합니다.");
             } else if (balanceCoverage.compareTo(new BigDecimal("0.30")) < 0) {
                 adjustedRatio = adjustedRatio.subtract(new BigDecimal("0.02"));
-                reasons.add("가용 잔액이 평균 소비 대비 부족합니다");
+                reasons.add("가용 잔액이 평균 소비 대비 부족하여 2% 하향 조정합니다.");
             }
         }
 
@@ -177,31 +185,31 @@ public class AutoRepaymentPolicyService {
 
             if (spendingPressure.compareTo(new BigDecimal("0.80")) >= 0) {
                 adjustedRatio = adjustedRatio.subtract(new BigDecimal("0.02"));
-                reasons.add("이번 달 지출 비중이 높습니다");
+                reasons.add("이번 달 지출 비중이 높아 2% 하향 조정합니다.");
             } else if (spendingPressure.compareTo(new BigDecimal("0.50")) < 0) {
                 adjustedRatio = adjustedRatio.add(new BigDecimal("0.01"));
-                reasons.add("이번 달 지출 비중이 낮습니다");
+                reasons.add("이번 달 지출 비중이 낮아 2% 상향 조정합니다.");
             }
 
             if (loanBurden.compareTo(new BigDecimal("2.00")) >= 0) {
                 adjustedRatio = adjustedRatio.subtract(new BigDecimal("0.01"));
-                reasons.add("대출 잔액 부담이 큽니다");
+                reasons.add("대출 잔액 부담이 커 1% 하향 조정합니다.");
             } else if (loanBurden.compareTo(BigDecimal.ONE) < 0) {
                 adjustedRatio = adjustedRatio.add(new BigDecimal("0.01"));
-                reasons.add("대출 잔액 부담이 상대적으로 낮습니다");
+                reasons.add("대출 잔액 부담이 낮아 1% 상향 조정합니다.");
             }
         }
 
         if (daysUntilPaymentDue != null) {
             if (daysUntilPaymentDue <= 3) {
                 adjustedRatio = adjustedRatio.add(new BigDecimal("0.03"));
-                reasons.add("상환 기일이 임박했습니다");
+                reasons.add("상환 기일이 임박해 3% 상향 조정합니다.");
             } else if (daysUntilPaymentDue <= 7) {
                 adjustedRatio = adjustedRatio.add(new BigDecimal("0.02"));
-                reasons.add("상환 기일이 가까워졌습니다");
+                reasons.add("상환 기일이 가까워져 2% 상향 조정합니다.");
             } else if (daysUntilPaymentDue <= 14) {
                 adjustedRatio = adjustedRatio.add(new BigDecimal("0.01"));
-                reasons.add("상환 준비 구간입니다");
+                reasons.add("상환 준비 기간이므로 1% 상향 조정합니다.");
             }
         }
 

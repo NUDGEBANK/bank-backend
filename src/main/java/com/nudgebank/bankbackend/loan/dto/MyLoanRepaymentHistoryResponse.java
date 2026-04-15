@@ -8,5 +8,6 @@ public record MyLoanRepaymentHistoryResponse(
     BigDecimal repaymentAmount,
     BigDecimal repaymentRate,
     OffsetDateTime repaymentDatetime,
-    BigDecimal remainingBalance
+    BigDecimal remainingBalance,
+    String reason
 ) {}
