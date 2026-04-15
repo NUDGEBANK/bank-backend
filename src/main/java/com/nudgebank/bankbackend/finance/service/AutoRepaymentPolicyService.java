@@ -19,7 +19,7 @@ public class AutoRepaymentPolicyService {
 
     private static final BigDecimal ZERO = BigDecimal.ZERO;
     private static final BigDecimal MIN_RATIO = new BigDecimal("0.00");
-    private static final BigDecimal MAX_RATIO = new BigDecimal("0.60");
+    private static final BigDecimal MAX_RATIO = new BigDecimal("0.10");
 
     private final PersonalBaselineService personalBaselineService;
 
@@ -35,7 +35,7 @@ public class AutoRepaymentPolicyService {
         }
 
         if (availableBalance.compareTo(ZERO) <= 0) {
-            return buildBlockedResponse(transactionId, finalBaseline, financialStatus, "HOLD", "가용 잔액이 없어 자동상환을 보류합니다.");
+            return buildBlockedResponse(transactionId, finalBaseline, financialStatus, "BLOCKED", "가용 잔액이 없어 자동상환을 보류합니다.");
         }
 
         BigDecimal baseRatio = calculateBaseRepaymentRatio(finalBaseline);
@@ -117,18 +117,18 @@ public class AutoRepaymentPolicyService {
     }
 
     private BigDecimal calculateBaseRepaymentRatio(FinalBaselineResponse finalBaseline) {
-        BigDecimal ratio = new BigDecimal("0.20");
+        BigDecimal ratio = new BigDecimal("0.03");
 
         if (nullSafe(finalBaseline.getEssentialRatio()).compareTo(new BigDecimal("0.60")) >= 0) {
-            ratio = ratio.subtract(new BigDecimal("0.05"));
+            ratio = ratio.subtract(new BigDecimal("0.01"));
         }
 
         if (nullSafe(finalBaseline.getDiscretionaryRatio()).compareTo(new BigDecimal("0.35")) >= 0) {
-            ratio = ratio.add(new BigDecimal("0.05"));
+            ratio = ratio.add(new BigDecimal("0.01"));
         }
 
         if (nullSafe(finalBaseline.getRiskRatio()).compareTo(new BigDecimal("0.20")) >= 0) {
-            ratio = ratio.subtract(new BigDecimal("0.05"));
+            ratio = ratio.subtract(new BigDecimal("0.01"));
         }
 
         BigDecimal avgSpending = resolvePolicyAvgSpending(finalBaseline);
@@ -136,13 +136,13 @@ public class AutoRepaymentPolicyService {
         if (avgSpending.compareTo(ZERO) > 0) {
             BigDecimal volatilityRatio = volatility.divide(avgSpending, 4, RoundingMode.HALF_UP);
             if (volatilityRatio.compareTo(new BigDecimal("1.00")) >= 0) {
-                ratio = ratio.subtract(new BigDecimal("0.05"));
+                ratio = ratio.subtract(new BigDecimal("0.01"));
             } else if (volatilityRatio.compareTo(new BigDecimal("0.40")) <= 0) {
-                ratio = ratio.add(new BigDecimal("0.05"));
+                ratio = ratio.add(new BigDecimal("0.01"));
             }
         }
 
-        return clamp(ratio, new BigDecimal("0.05"), new BigDecimal("0.35"));
+        return clamp(ratio, new BigDecimal("0.00"), new BigDecimal("0.10"));
     }
 
     private PolicyOutcome applyFinancialAdjustments(
@@ -163,10 +163,10 @@ public class AutoRepaymentPolicyService {
         if (avgSpending.compareTo(ZERO) > 0) {
             BigDecimal balanceCoverage = availableBalance.divide(avgSpending, 4, RoundingMode.HALF_UP);
             if (balanceCoverage.compareTo(new BigDecimal("1.50")) >= 0) {
-                adjustedRatio = adjustedRatio.add(new BigDecimal("0.10"));
+                adjustedRatio = adjustedRatio.add(new BigDecimal("0.02"));
                 reasons.add("가용 잔액이 평균 소비 대비 충분합니다");
             } else if (balanceCoverage.compareTo(new BigDecimal("0.30")) < 0) {
-                adjustedRatio = adjustedRatio.subtract(new BigDecimal("0.10"));
+                adjustedRatio = adjustedRatio.subtract(new BigDecimal("0.02"));
                 reasons.add("가용 잔액이 평균 소비 대비 부족합니다");
             }
         }
@@ -176,31 +176,31 @@ public class AutoRepaymentPolicyService {
             BigDecimal loanBurden = totalLoanRemainingPrincipal.divide(monthlyIncome, 4, RoundingMode.HALF_UP);
 
             if (spendingPressure.compareTo(new BigDecimal("0.80")) >= 0) {
-                adjustedRatio = adjustedRatio.subtract(new BigDecimal("0.10"));
+                adjustedRatio = adjustedRatio.subtract(new BigDecimal("0.02"));
                 reasons.add("이번 달 지출 비중이 높습니다");
             } else if (spendingPressure.compareTo(new BigDecimal("0.50")) < 0) {
-                adjustedRatio = adjustedRatio.add(new BigDecimal("0.05"));
+                adjustedRatio = adjustedRatio.add(new BigDecimal("0.01"));
                 reasons.add("이번 달 지출 비중이 낮습니다");
             }
 
             if (loanBurden.compareTo(new BigDecimal("2.00")) >= 0) {
-                adjustedRatio = adjustedRatio.subtract(new BigDecimal("0.05"));
+                adjustedRatio = adjustedRatio.subtract(new BigDecimal("0.01"));
                 reasons.add("대출 잔액 부담이 큽니다");
             } else if (loanBurden.compareTo(BigDecimal.ONE) < 0) {
-                adjustedRatio = adjustedRatio.add(new BigDecimal("0.05"));
+                adjustedRatio = adjustedRatio.add(new BigDecimal("0.01"));
                 reasons.add("대출 잔액 부담이 상대적으로 낮습니다");
             }
         }
 
         if (daysUntilPaymentDue != null) {
             if (daysUntilPaymentDue <= 3) {
-                adjustedRatio = adjustedRatio.add(new BigDecimal("0.15"));
+                adjustedRatio = adjustedRatio.add(new BigDecimal("0.03"));
                 reasons.add("상환 기일이 임박했습니다");
             } else if (daysUntilPaymentDue <= 7) {
-                adjustedRatio = adjustedRatio.add(new BigDecimal("0.10"));
+                adjustedRatio = adjustedRatio.add(new BigDecimal("0.02"));
                 reasons.add("상환 기일이 가까워졌습니다");
             } else if (daysUntilPaymentDue <= 14) {
-                adjustedRatio = adjustedRatio.add(new BigDecimal("0.05"));
+                adjustedRatio = adjustedRatio.add(new BigDecimal("0.01"));
                 reasons.add("상환 준비 구간입니다");
             }
         }
@@ -231,32 +231,26 @@ public class AutoRepaymentPolicyService {
         if (ratio.compareTo(new BigDecimal("0.00")) == 0) {
             return "HOLD";
         }
-        if (ratio.compareTo(new BigDecimal("0.10")) <= 0) {
+        if (ratio.compareTo(new BigDecimal("0.03")) <= 0) {
             return "MINIMUM";
         }
-        if (ratio.compareTo(new BigDecimal("0.25")) <= 0) {
+        if (ratio.compareTo(new BigDecimal("0.07")) <= 0) {
             return "STANDARD";
         }
-        if (ratio.compareTo(new BigDecimal("0.40")) <= 0) {
-            return "BOOST";
-        }
-        return "AGGRESSIVE";
+        return "BOOST";
     }
 
     private String resolveGrade(BigDecimal ratio) {
         if (ratio.compareTo(new BigDecimal("0.00")) == 0) {
             return "BLOCKED";
         }
-        if (ratio.compareTo(new BigDecimal("0.10")) <= 0) {
+        if (ratio.compareTo(new BigDecimal("0.03")) <= 0) {
             return "DEFENSIVE";
         }
-        if (ratio.compareTo(new BigDecimal("0.25")) <= 0) {
+        if (ratio.compareTo(new BigDecimal("0.07")) <= 0) {
             return "BALANCED";
         }
-        if (ratio.compareTo(new BigDecimal("0.40")) <= 0) {
-            return "PROACTIVE";
-        }
-        return "ACCELERATED";
+        return "PROACTIVE";
     }
 
     private BigDecimal clamp(BigDecimal value, BigDecimal min, BigDecimal max) {
