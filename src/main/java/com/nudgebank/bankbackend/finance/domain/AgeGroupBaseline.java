@@ -39,4 +39,26 @@ public class AgeGroupBaseline {
 
     @Column(name = "repayment_action", length = 20)
     private String repaymentAction;
+
+    public AgeGroupBaseline(
+            String ageGroup,
+            BigDecimal avgSpending,
+            BigDecimal essentialRatio,
+            BigDecimal normalRatio,
+            BigDecimal discretionaryRatio,
+            BigDecimal riskRatio,
+            BigDecimal volatility,
+            BigDecimal volatilityIndex,
+            String repaymentAction
+    ) {
+        this.ageGroup = ageGroup;
+        this.avgSpending = avgSpending;
+        this.essentialRatio = essentialRatio;
+        this.normalRatio = normalRatio;
+        this.discretionaryRatio = discretionaryRatio;
+        this.riskRatio = riskRatio;
+        this.volatility = volatility;
+        this.volatilityIndex = volatilityIndex;
+        this.repaymentAction = repaymentAction;
+    }
 }
