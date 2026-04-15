@@ -29,4 +29,11 @@ public interface LoanRepository extends JpaRepository<Loan, Long> {
         java.time.LocalDate endDate
     );
 
+    Optional<Loan> findTopByMember_MemberIdAndLoanApplication_Card_CardIdAndPrincipalAmountAndStartDateOrderByIdDesc(
+        Long memberId,
+        Long cardId,
+        java.math.BigDecimal principalAmount,
+        java.time.LocalDate startDate
+    );
+
 }

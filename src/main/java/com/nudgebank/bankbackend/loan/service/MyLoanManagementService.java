@@ -387,11 +387,24 @@ public class MyLoanManagementService {
     }
 
     private java.util.Optional<Loan> resolveLoanForHistory(Long memberId, LoanHistory loanHistory) {
+        BigDecimal normalizedPrincipalAmount = WonAmount.floor(loanHistory.getTotalPrincipal());
+
+        java.util.Optional<Loan> matchedLoan = loanRepository
+            .findTopByMember_MemberIdAndLoanApplication_Card_CardIdAndPrincipalAmountAndStartDateOrderByIdDesc(
+                memberId,
+                loanHistory.getCard().getCardId(),
+                normalizedPrincipalAmount,
+                loanHistory.getStartDate()
+            );
+        if (matchedLoan.isPresent()) {
+            return matchedLoan;
+        }
+
         return loanRepository
             .findTopByMember_MemberIdAndLoanApplication_Card_CardIdAndPrincipalAmountAndStartDateAndEndDateOrderByIdDesc(
                 memberId,
                 loanHistory.getCard().getCardId(),
-                nullSafe(loanHistory.getTotalPrincipal()),
+                normalizedPrincipalAmount,
                 loanHistory.getStartDate(),
                 loanHistory.getEndDate()
             );
