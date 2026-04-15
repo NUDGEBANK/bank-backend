@@ -319,7 +319,7 @@ public class CertificateVerificationService {
 
         for (int index = 0; index <= koreanOnlyText.length() - targetLength; index++) {
             String candidate = koreanOnlyText.substring(index, index + targetLength);
-            if (normalizedMemberName.equals(candidate) || hasAllowedNameMismatch(normalizedMemberName, candidate)) {
+            if (normalizedMemberName.equals(candidate) || hasSingleCharacterMismatch(normalizedMemberName, candidate)) {
                 return true;
             }
         }
