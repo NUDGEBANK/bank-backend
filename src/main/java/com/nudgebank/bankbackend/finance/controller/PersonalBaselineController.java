@@ -1,6 +1,7 @@
 package com.nudgebank.bankbackend.finance.controller;
 
 import com.nudgebank.bankbackend.auth.security.SecurityUtil;
+import com.nudgebank.bankbackend.finance.dto.ConsumerBaselineResponse;
 import com.nudgebank.bankbackend.finance.dto.FinalBaselineResponse;
 import com.nudgebank.bankbackend.finance.service.PersonalBaselineService;
 import lombok.RequiredArgsConstructor;
@@ -26,5 +27,14 @@ public class PersonalBaselineController {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         }
         return personalBaselineService.calculateAndGetFinalBaseline(memberId, transactionId);
+    }
+
+    @GetMapping("/consumer/me")
+    public ConsumerBaselineResponse getLatestConsumerBaseline(Authentication authentication) {
+        Long memberId = SecurityUtil.extractUserId(authentication);
+        if (memberId == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        }
+        return personalBaselineService.getLatestConsumerBaseline(memberId);
     }
 }

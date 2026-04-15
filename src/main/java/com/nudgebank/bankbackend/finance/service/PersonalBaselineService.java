@@ -6,11 +6,14 @@ import com.nudgebank.bankbackend.card.domain.CardTransaction;
 import com.nudgebank.bankbackend.card.repository.CardTransactionRepository;
 import com.nudgebank.bankbackend.finance.domain.AgeGroupBaseline;
 import com.nudgebank.bankbackend.finance.domain.ConsumerBaseline;
+import com.nudgebank.bankbackend.finance.domain.ConsumerMonthlyAnalysis;
 import com.nudgebank.bankbackend.finance.domain.ConsumptionType;
+import com.nudgebank.bankbackend.finance.dto.ConsumerBaselineResponse;
 import com.nudgebank.bankbackend.finance.dto.FinalBaselineResponse;
 import com.nudgebank.bankbackend.finance.dto.FinancialStatusResponse;
 import com.nudgebank.bankbackend.finance.repository.AgeGroupBaselineRepository;
 import com.nudgebank.bankbackend.finance.repository.ConsumerBaselineRepository;
+import com.nudgebank.bankbackend.finance.repository.ConsumerMonthlyAnalysisRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -24,6 +27,7 @@ import java.time.Period;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -34,13 +38,26 @@ import java.util.Map;
 public class PersonalBaselineService {
 
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+    private static final String INTERNAL_BANK_CATEGORY_NAME = "넛지뱅크";
+    private static final String LOAN_CATEGORY_NAME = "대출";
+    private static final String LOAN_DISBURSEMENT_CATEGORY_NAME = "대출 실행 입금";
+    private static final String LOAN_MARKET_NAME = "NudgeBank 대출 실행";
+    private static final String AUTO_REPAYMENT_MENU_NAME = "대출금 자동상환";
 
     private final MemberRepository memberRepository;
     private final AgeGroupBaselineRepository ageGroupBaselineRepository;
     private final ConsumerBaselineRepository consumerBaselineRepository;
+    private final ConsumerMonthlyAnalysisRepository consumerMonthlyAnalysisRepository;
     private final CardTransactionRepository cardTransactionRepository;
     private final ConsumptionTypeClassifier consumptionTypeClassifier;
     private final FinancialStatusService financialStatusService;
+
+    @Transactional(readOnly = true)
+    public ConsumerBaselineResponse getLatestConsumerBaseline(Long memberId) {
+        return consumerBaselineRepository.findTopByMemberIdOrderByAnalysisYearMonthDesc(memberId)
+                .map(this::toConsumerBaselineResponse)
+                .orElse(null);
+    }
 
     public FinalBaselineResponse calculateAndGetFinalBaseline(Long memberId, Long transactionId) {
         Member member = memberRepository.findById(memberId)
@@ -65,18 +82,23 @@ public class PersonalBaselineService {
         LocalDate baselineStartDate = firstTransactionDate.isAfter(ninetyDaysAgo) ? firstTransactionDate : ninetyDaysAgo;
         LocalDate baselineEndDate = today.plusDays(1); // end exclusive
 
-        List<CardTransaction> transactions = cardTransactionRepository.findByMemberIdAndTransactionDatetimeBetween(
+        List<CardTransaction> transactions = cardTransactionRepository.findByMemberIdAndTransactionDatetimeGreaterThanEqualAndTransactionDatetimeLessThan(
                 memberId,
                 baselineStartDate.atStartOfDay(KST).toOffsetDateTime(),
                 baselineEndDate.atStartOfDay(KST).toOffsetDateTime()
         );
 
-        if (transactions.isEmpty()) {
+        List<CardTransaction> consumptionTransactions = transactions.stream()
+                .filter(transaction -> !isExcludedFromConsumptionMetrics(transaction))
+                .toList();
+
+        if (consumptionTransactions.isEmpty()) {
             return buildAgeOnlyResponse(memberId, age, ageBaseline, financialStatus);
         }
 
-        PersonalMetrics personal = calculatePersonalMetrics(baselineStartDate, today, transactions);
-        saveOrUpdateConsumerBaseline(memberId, personal, today);
+        PersonalMetrics personal = calculatePersonalMetrics(baselineStartDate, today, consumptionTransactions);
+        ConsumerBaseline baseline = saveOrUpdateConsumerBaseline(memberId, personal, today);
+        saveOrUpdateConsumerMonthlyAnalysis(memberId, today, baseline);
 
         Weight weight = resolveWeight(firstTransactionDate, today);
 
@@ -150,39 +172,102 @@ public class PersonalBaselineService {
         );
     }
 
-    private void saveOrUpdateConsumerBaseline(Long memberId, PersonalMetrics personal, LocalDate today) {
+    private ConsumerBaseline saveOrUpdateConsumerBaseline(Long memberId, PersonalMetrics personal, LocalDate today) {
         OffsetDateTime now = OffsetDateTime.now(KST);
         LocalDate analysisYearMonth = today.withDayOfMonth(1);
         BigDecimal volatilityIndex = calculateVolatilityIndex(personal.volatility());
+        consumerBaselineRepository.upsert(
+                memberId,
+                personal.avgSpending(),
+                personal.essentialRatio(),
+                personal.normalRatio(),
+                personal.discretionaryRatio(),
+                personal.riskRatio(),
+                personal.volatility(),
+                volatilityIndex,
+                analysisYearMonth,
+                now
+        );
+        return consumerBaselineRepository.findByMemberIdAndAnalysisYearMonth(memberId, analysisYearMonth)
+                .orElseThrow(() -> new IllegalStateException("개인 소비 baseline 저장 후 조회에 실패했습니다."));
+    }
 
-        consumerBaselineRepository.findByMemberIdAndAnalysisYearMonth(memberId, analysisYearMonth)
-                .ifPresentOrElse(
-                        baseline -> baseline.update(
-                                personal.avgSpending(),
-                                personal.essentialRatio(),
-                                personal.normalRatio(),
-                                personal.discretionaryRatio(),
-                                personal.riskRatio(),
-                                personal.volatility(),
-                                volatilityIndex,
-                                analysisYearMonth,
-                                now
-                        ),
-                        () -> consumerBaselineRepository.save(
-                                ConsumerBaseline.create(
-                                        memberId,
-                                        personal.avgSpending(),
-                                        personal.essentialRatio(),
-                                        personal.normalRatio(),
-                                        personal.discretionaryRatio(),
-                                        personal.riskRatio(),
-                                        personal.volatility(),
-                                        volatilityIndex,
-                                        analysisYearMonth,
-                                        now
-                                )
-                        )
+    private void saveOrUpdateConsumerMonthlyAnalysis(Long memberId, LocalDate today, ConsumerBaseline baseline) {
+        OffsetDateTime now = OffsetDateTime.now(KST);
+        LocalDate analysisYearMonth = today.withDayOfMonth(1);
+        OffsetDateTime startOfMonth = analysisYearMonth.atStartOfDay(KST).toOffsetDateTime();
+        OffsetDateTime startOfNextMonth = analysisYearMonth.plusMonths(1).atStartOfDay(KST).toOffsetDateTime();
+
+        List<CardTransaction> currentMonthTransactions = cardTransactionRepository.findByMemberIdAndTransactionDatetimeGreaterThanEqualAndTransactionDatetimeLessThan(
+                memberId,
+                startOfMonth,
+                startOfNextMonth
+        ).stream()
+                .filter(transaction -> !isExcludedFromConsumptionMetrics(transaction))
+                .toList();
+
+        BigDecimal currentMonthSpending = currentMonthTransactions.stream()
+                .map(CardTransaction::getAmount)
+                .map(this::nullSafe)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        int totalTransactionsCount = currentMonthTransactions.size();
+        int essentialTransactionsCount = 0;
+        int discretionaryTransactionsCount = 0;
+        Map<Long, BigDecimal> spendingByCategoryId = new java.util.HashMap<>();
+
+        for (CardTransaction transaction : currentMonthTransactions) {
+            ConsumptionType type = consumptionTypeClassifier.classify(transaction);
+            if (type == ConsumptionType.ESSENTIAL) {
+                essentialTransactionsCount++;
+            }
+            if (type == ConsumptionType.DISCRETIONARY || type == ConsumptionType.RISK) {
+                discretionaryTransactionsCount++;
+            }
+
+            if (transaction.getCategory() != null && transaction.getCategory().getCategoryId() != null) {
+                spendingByCategoryId.merge(
+                        transaction.getCategory().getCategoryId(),
+                        nullSafe(transaction.getAmount()),
+                        BigDecimal::add
                 );
+            }
+        }
+
+        Long largestSpendingCategoryId = null;
+        BigDecimal largestSpendingAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        Map.Entry<Long, BigDecimal> maxEntry = spendingByCategoryId.entrySet().stream()
+                .max(Map.Entry.comparingByValue(Comparator.naturalOrder()))
+                .orElse(null);
+        if (maxEntry != null) {
+            largestSpendingCategoryId = maxEntry.getKey();
+            largestSpendingAmount = nullSafe(maxEntry.getValue()).setScale(2, RoundingMode.HALF_UP);
+        }
+
+        BigDecimal sameDayAvgSpending = baseline == null
+                ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+                : nullSafe(baseline.getAvgSpending())
+                .multiply(BigDecimal.valueOf(totalTransactionsCount))
+                .setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal spendingDiffAmount = currentMonthSpending.subtract(sameDayAvgSpending).setScale(2, RoundingMode.HALF_UP);
+        String spendingStatus = resolveSpendingStatus(currentMonthSpending, sameDayAvgSpending, spendingDiffAmount);
+
+        consumerMonthlyAnalysisRepository.upsert(
+                memberId,
+                analysisYearMonth,
+                currentMonthSpending,
+                sameDayAvgSpending,
+                spendingDiffAmount,
+                spendingStatus,
+                totalTransactionsCount,
+                essentialTransactionsCount,
+                discretionaryTransactionsCount,
+                largestSpendingCategoryId,
+                largestSpendingAmount,
+                now
+        );
     }
 
     private FinalBaselineResponse buildAgeOnlyResponse(Long memberId, int age, AgeGroupBaseline baseline, FinancialStatusResponse financialStatusResponse) {
@@ -202,6 +287,22 @@ public class PersonalBaselineService {
                 .baselineSource("AGE_ONLY")
                 .financialStatusResponse(financialStatusResponse)
                 .build();
+    }
+
+    private ConsumerBaselineResponse toConsumerBaselineResponse(ConsumerBaseline baseline) {
+        return new ConsumerBaselineResponse(
+                baseline.getBaselineId(),
+                baseline.getAnalysisYearMonth(),
+                baseline.getAvgSpending(),
+                baseline.getEssentialRatio(),
+                baseline.getNormalRatio(),
+                baseline.getDiscretionaryRatio(),
+                baseline.getRiskRatio(),
+                baseline.getVolatility(),
+                baseline.getVolatilityIndex(),
+                baseline.getCreatedAt(),
+                baseline.getUpdatedAt()
+        );
     }
 
     private Weight resolveWeight(LocalDate firstTransactionDate, LocalDate today) {
@@ -257,6 +358,42 @@ public class PersonalBaselineService {
 
         // TODO: 연령대 평균 대비 지수 계산 기준이 확정되면 교체
         return BigDecimal.ONE.setScale(4, RoundingMode.HALF_UP);
+    }
+
+    private boolean isExcludedFromConsumptionMetrics(CardTransaction transaction) {
+        String categoryName = transaction.getCategory() != null ? safe(transaction.getCategory().getCategoryName()) : "";
+        String marketName = transaction.getMarket() != null ? safe(transaction.getMarket().getMarketName()) : "";
+        String menuName = safe(transaction.getMenuName());
+
+        return INTERNAL_BANK_CATEGORY_NAME.equals(categoryName)
+                || LOAN_CATEGORY_NAME.equals(categoryName)
+                || LOAN_DISBURSEMENT_CATEGORY_NAME.equals(categoryName)
+                || LOAN_MARKET_NAME.equals(marketName)
+                || AUTO_REPAYMENT_MENU_NAME.equals(menuName);
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private String resolveSpendingStatus(
+            BigDecimal currentMonthSpending,
+            BigDecimal sameDayAvgSpending,
+            BigDecimal spendingDiffAmount
+    ) {
+        if (currentMonthSpending.compareTo(BigDecimal.ZERO) <= 0) {
+            return "NO_SPENDING";
+        }
+        if (sameDayAvgSpending.compareTo(BigDecimal.ZERO) <= 0) {
+            return "INSUFFICIENT_BASELINE";
+        }
+
+        BigDecimal diffRatio = spendingDiffAmount.abs()
+                .divide(sameDayAvgSpending, 4, RoundingMode.HALF_UP);
+        if (diffRatio.compareTo(new BigDecimal("0.05")) <= 0) {
+            return "STABLE";
+        }
+        return spendingDiffAmount.compareTo(BigDecimal.ZERO) > 0 ? "HIGHER_THAN_BASELINE" : "LOWER_THAN_BASELINE";
     }
 
     private int calculateAge(Member member) {
