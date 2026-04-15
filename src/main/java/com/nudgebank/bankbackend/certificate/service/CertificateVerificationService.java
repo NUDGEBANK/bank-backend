@@ -317,9 +317,13 @@ public class CertificateVerificationService {
             return false;
         }
 
+        boolean hasNameLabel = hasNameLabel(extractedText);
+
         for (int index = 0; index <= koreanOnlyText.length() - targetLength; index++) {
             String candidate = koreanOnlyText.substring(index, index + targetLength);
-            if (normalizedMemberName.equals(candidate) || hasAllowedNameMismatch(normalizedMemberName, candidate)) {
+            if (normalizedMemberName.equals(candidate)
+                || hasSingleCharacterMismatch(normalizedMemberName, candidate)
+                || (hasNameLabel && hasLabelBasedNameMismatch(normalizedMemberName, candidate))) {
                 return true;
             }
         }
@@ -342,6 +346,15 @@ public class CertificateVerificationService {
 
     private boolean hasSingleCharacterMismatch(String expected, String actual) {
         return hasCharacterMismatchWithinThreshold(expected, actual, 1);
+    }
+
+    private boolean hasNameLabel(String extractedText) {
+        if (extractedText == null || extractedText.isBlank()) {
+            return false;
+        }
+
+        String compactText = compactForDateExtraction(extractedText);
+        return compactText.contains("\uC131\uBA85") || compactText.contains("\uC774\uB984");
     }
 
     private boolean hasCharacterMismatchWithinThreshold(String expected, String actual, int threshold) {
