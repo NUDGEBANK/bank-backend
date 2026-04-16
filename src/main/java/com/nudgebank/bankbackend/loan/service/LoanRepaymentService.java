@@ -43,9 +43,9 @@ public class LoanRepaymentService {
     private static final BigDecimal ZERO = BigDecimal.ZERO;
     private static final BigDecimal OVERDUE_SPREAD = new BigDecimal("3.0");
     private static final BigDecimal MAX_OVERDUE_RATE = new BigDecimal("15.0");
-    private static final String REPAYMENT_CATEGORY_NAME = "대출상환";
+    private static final String REPAYMENT_CATEGORY_NAME = "넛지뱅크";
     private static final String REPAYMENT_MCC = "6012";
-    private static final String REPAYMENT_MARKET_NAME = "NudgeBank 대출 상환";
+    private static final String REPAYMENT_MARKET_NAME = "대출금 수동상환";
     private static final String EQUAL_INSTALLMENT_TYPE = "EQUAL_INSTALLMENT";
 
     private final LoanRepository loanRepository;
@@ -98,7 +98,7 @@ public class LoanRepaymentService {
 
         loanRepaymentHistoryRepository.save(LoanRepaymentHistory.create(
             resolvedLoan.loanHistory(),
-            transaction,
+            null,
             won(appliedRepayment.totalPaid()),
             BigDecimal.ZERO,
             OffsetDateTime.now(),
