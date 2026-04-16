@@ -74,9 +74,14 @@ public class CardHistoryService {
     Card card = cardOptional.get();
     List<CardTransaction> transactions =
         cardTransactionRepository.findByCardCardIdOrderByTransactionDatetimeDesc(card.getCardId());
+
+    List<CardTransaction> filteredTransactions = transactions.stream()
+            .filter(t -> !"대출금 자동상환".equals(t.getMenuName()))
+            .toList();
+
     Map<Long, LoanRepaymentHistory> repaymentHistoryByTransactionId = loanRepaymentHistoryRepository
         .findByTransaction_TransactionIdIn(
-            transactions.stream().map(CardTransaction::getTransactionId).toList()
+                filteredTransactions.stream().map(CardTransaction::getTransactionId).toList()
         ).stream()
         .collect(Collectors.toMap(
             history -> history.getTransaction().getTransactionId(),
@@ -93,7 +98,7 @@ public class CardHistoryService {
         card.getExpiredYm(),
         card.getStatus(),
         calculateSpentThisMonth(card.getCardId()),
-        transactions.stream().map(transaction -> toTransactionDto(
+        filteredTransactions.stream().map(transaction -> toTransactionDto(
             transaction,
             repaymentHistoryByTransactionId.get(transaction.getTransactionId())
         )).toList()
