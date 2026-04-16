@@ -27,7 +27,7 @@ public class LoanProductInitializer implements CommandLineRunner {
                 "자격증 취득과 직무 역량 개발이 필요한 청년 고객",
                 new BigDecimal("3.50"),
                 new BigDecimal("5.50"),
-                3_000_000L,
+                5_000_000L,
                 500_000L,
                 12,
                 "MATURITY_LUMP_SUM"
@@ -39,7 +39,7 @@ public class LoanProductInitializer implements CommandLineRunner {
                 "소비 흐름 관리가 필요한 고객",
                 new BigDecimal("4.00"),
                 new BigDecimal("6.50"),
-                5_000_000L,
+                10_000_000L,
                 500_000L,
                 12,
                 "EQUAL_INSTALLMENT"
