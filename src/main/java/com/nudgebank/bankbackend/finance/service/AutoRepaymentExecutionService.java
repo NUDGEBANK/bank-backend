@@ -101,7 +101,7 @@ public class AutoRepaymentExecutionService {
             return;
         }
 
-        RepaymentService.RepaymentResult result = repaymentService.repay(resolvedLoan.loanHistory(), resolvedLoan.loan(), repaymentAmount, transaction);
+        RepaymentService.RepaymentResult result = repaymentService.repay(resolvedLoan.loanHistory(), resolvedLoan.loan(), repaymentAmount, transaction, decision.getPolicyReason());
         log.info("실제 자동 상환 금액 : " + result.totalPaid());
         if (result.totalPaid().compareTo(BigDecimal.ZERO) > 0) {
             log.info("차감할게요 : " + result.totalPaid());
@@ -192,7 +192,8 @@ public class AutoRepaymentExecutionService {
                 won(appliedRepayment.totalPaid()),
                 toPercent(ratio),
                 OffsetDateTime.now(),
-                won(resolvedLoan.loanHistory().getRemainingPrincipal())
+                won(resolvedLoan.loanHistory().getRemainingPrincipal()),
+                null
         ));
 
         return AutoRepaymentExecutionResult.fromDecision(

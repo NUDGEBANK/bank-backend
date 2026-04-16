@@ -44,13 +44,13 @@ public class RepaymentService {
         }
 
         RepaymentResult result = applyRepayment(loanHistory, loan, normalizedRequestedAmount);
-        saveRepaymentHistoryIfApplied(loanHistory, null, null, result);
+        saveRepaymentHistoryIfApplied(loanHistory, null, result, null);
         return result;
     }
 
     public RepaymentResult repay(LoanHistory loanHistory, Loan loan, BigDecimal requestedAmount, CardTransaction transaction) {
         RepaymentResult result = applyRepayment(loanHistory, loan, requestedAmount);
-        saveRepaymentHistoryIfApplied(loanHistory, transaction, null, result);
+        saveRepaymentHistoryIfApplied(loanHistory, transaction, result, null);
         return result;
     }
 
@@ -136,10 +136,10 @@ public class RepaymentService {
             Loan loan,
             BigDecimal requestedAmount,
             CardTransaction transaction,
-            BigDecimal repaymentRate
+            String reason
     ) {
         RepaymentResult result = applyRepayment(loanHistory, loan, requestedAmount);
-        saveRepaymentHistoryIfApplied(loanHistory, transaction, repaymentRate, result);
+        saveRepaymentHistoryIfApplied(loanHistory, transaction, result, reason);
         return result;
     }
 
@@ -158,14 +158,14 @@ public class RepaymentService {
     private void saveRepaymentHistoryIfApplied(
             LoanHistory loanHistory,
             CardTransaction transaction,
-            BigDecimal repaymentRate,
-            RepaymentResult result
+            RepaymentResult result,
+            String reason
     ) {
         if (result == null || !result.applied()) {
             return;
         }
 
-        repaymentRate = result.totalPaid().divide(transaction.getAmount(), 4, RoundingMode.HALF_UP);
+        BigDecimal repaymentRate = result.totalPaid().divide(transaction.getAmount(), 4, RoundingMode.HALF_UP);
 
         loanRepaymentHistoryRepository.save(LoanRepaymentHistory.create(
                 loanHistory,
@@ -173,7 +173,8 @@ public class RepaymentService {
                 won(result.totalPaid()),
                 repaymentRate,
                 OffsetDateTime.now(),
-                won(result.remainingPrincipal())
+                won(result.remainingPrincipal()),
+                reason
         ));
     }
 

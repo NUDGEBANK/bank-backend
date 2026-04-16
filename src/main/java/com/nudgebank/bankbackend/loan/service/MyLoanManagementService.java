@@ -2,6 +2,7 @@ package com.nudgebank.bankbackend.loan.service;
 
 import com.nudgebank.bankbackend.certificate.domain.CertificateMaster;
 import com.nudgebank.bankbackend.certificate.domain.CertificateSubmission;
+import com.nudgebank.bankbackend.card.domain.CardTransaction;
 import com.nudgebank.bankbackend.certificate.repository.CertificateMasterRepository;
 import com.nudgebank.bankbackend.certificate.repository.CertificateSubmissionRepository;
 import com.nudgebank.bankbackend.common.util.WonAmount;
@@ -16,6 +17,7 @@ import com.nudgebank.bankbackend.loan.dto.MyLoanSummaryResponse;
 import com.nudgebank.bankbackend.loan.repository.*;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -146,15 +148,35 @@ public class MyLoanManagementService {
         }
 
         return loanRepaymentHistoryRepository
-            .findTop10ByLoanHistory_IdOrderByRepaymentDatetimeDesc(loanHistory.getId()).stream()
+            .findByLoanHistoryIdWithTransaction(loanHistory.getId(), PageRequest.of(0, 10)).stream()
             .map(history -> new MyLoanRepaymentHistoryResponse(
                 history.getRepaymentId(),
                 won(history.getRepaymentAmount()),
                 nullSafe(history.getRepaymentRate()),
                 history.getRepaymentDatetime(),
-                won(history.getRemainingBalance())
+                won(history.getRemainingBalance()),
+                history.getPolicyReason(),
+                toTransactionInfo(history.getTransaction())
             ))
             .toList();
+    }
+
+    private MyLoanRepaymentHistoryResponse.TransactionInfo toTransactionInfo(CardTransaction transaction) {
+        if (transaction == null) {
+            return null;
+        }
+
+        return new MyLoanRepaymentHistoryResponse.TransactionInfo(
+            transaction.getTransactionId(),
+            transaction.getCard() != null ? transaction.getCard().getCardId() : null,
+            transaction.getMarket() != null ? transaction.getMarket().getMarketId() : null,
+            transaction.getCategory() != null ? transaction.getCategory().getCategoryId() : null,
+            transaction.getQrId(),
+            won(transaction.getAmount()),
+            transaction.getTransactionDatetime(),
+            transaction.getMenuName(),
+            transaction.getQuantity()
+        );
     }
 
     public List<CompletedLoanHistoryResponse> getCompletedLoans(Long memberId) {

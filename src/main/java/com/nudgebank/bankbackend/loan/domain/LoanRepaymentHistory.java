@@ -41,13 +41,17 @@ public class LoanRepaymentHistory {
     @Column(name = "remaining_balance", precision = 15, scale = 2)
     private BigDecimal remainingBalance;
 
+    @Column(name = "policy_reason")
+    private String policyReason;
+
     private LoanRepaymentHistory(
             LoanHistory loanHistory,
             CardTransaction transaction,
             BigDecimal repaymentAmount,
             BigDecimal repaymentRate,
             OffsetDateTime repaymentDatetime,
-            BigDecimal remainingBalance
+            BigDecimal remainingBalance,
+            String policyReason
     ) {
         this.loanHistory = loanHistory;
         this.transaction = transaction;
@@ -55,6 +59,7 @@ public class LoanRepaymentHistory {
         this.repaymentRate = repaymentRate;
         this.repaymentDatetime = repaymentDatetime;
         this.remainingBalance = remainingBalance;
+        this.policyReason = policyReason;
     }
 
     public static LoanRepaymentHistory create(
@@ -63,7 +68,8 @@ public class LoanRepaymentHistory {
             BigDecimal repaymentAmount,
             BigDecimal repaymentRate,
             OffsetDateTime repaymentDatetime,
-            BigDecimal remainingBalance
+            BigDecimal remainingBalance,
+            String policyReason
     ) {
         return new LoanRepaymentHistory(
                 loanHistory,
@@ -71,7 +77,8 @@ public class LoanRepaymentHistory {
                 repaymentAmount,
                 repaymentRate,
                 repaymentDatetime,
-                remainingBalance
+                remainingBalance,
+                policyReason
         );
     }
 }

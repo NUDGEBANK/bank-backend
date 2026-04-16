@@ -102,7 +102,8 @@ public class LoanRepaymentService {
             won(appliedRepayment.totalPaid()),
             BigDecimal.ZERO,
             OffsetDateTime.now(),
-            won(resolvedLoan.loanHistory().getRemainingPrincipal())
+            won(resolvedLoan.loanHistory().getRemainingPrincipal()),
+                null
         ));
 
         return new LoanRepaymentExecuteResponse(
