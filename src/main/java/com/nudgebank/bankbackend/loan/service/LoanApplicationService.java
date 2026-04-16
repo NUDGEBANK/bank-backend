@@ -306,7 +306,7 @@ public class LoanApplicationService {
         int repaymentMonths = resolveRepaymentMonths(loanApplication);
         LocalDate endDate = startDate.plusMonths(repaymentMonths);
         BigDecimal principalAmount = floorWon(nullSafe(loanApplication.getLoanAmount()));
-        BigDecimal interestRate = resolveInitialInterestRate(loanApplication.getLoanProduct());
+        BigDecimal interestRate = resolveInitialInterestRate(loanApplication);
 
         // loan 저장
         loanRepository.save(
@@ -503,9 +503,16 @@ public class LoanApplicationService {
         return 12;
     }
 
-    private BigDecimal resolveInitialInterestRate(LoanProduct loanProduct) {
+    private BigDecimal resolveInitialInterestRate(LoanApplication application) {
+        LoanProduct loanProduct = application.getLoanProduct();
         if (SELF_DEVELOPMENT_TYPE.equals(loanProduct.getLoanProductType())) {
             return requireInterestRate(loanProduct, true);
+        }
+        if (CONSUMPTION_ANALYSIS_TYPE.equals(loanProduct.getLoanProductType())) {
+            int creditScore = application.getCreditHistory() != null && application.getCreditHistory().getCreditScore() != null
+                ? application.getCreditHistory().getCreditScore()
+                : ConsumptionAnalysisInterestPolicy.MIN_ELIGIBLE_CREDIT_SCORE;
+            return ConsumptionAnalysisInterestPolicy.resolve(creditScore);
         }
 
         return requireInterestRate(loanProduct, false);
