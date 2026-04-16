@@ -61,6 +61,14 @@ services:
     networks:
       - nudge-net
 
+  nudgebank-ai:
+    build: ../nudgebank-ai
+    container_name: nudge-bank-ai
+    env_file:
+      - .env
+    networks:
+      - nudge-net
+
 networks:
   nudge-net:
 
