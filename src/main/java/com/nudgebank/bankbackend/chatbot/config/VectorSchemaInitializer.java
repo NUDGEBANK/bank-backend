@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class ChatMessageVectorSchemaInitializer {
+public class VectorSchemaInitializer {
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -23,6 +23,11 @@ public class ChatMessageVectorSchemaInitializer {
         jdbcTemplate.execute("""
             CREATE INDEX IF NOT EXISTS chat_messages_embedding_hnsw_idx
             ON chat_messages USING hnsw (embedding vector_cosine_ops)
+            """);
+
+        jdbcTemplate.execute("""
+            CREATE INDEX IF NOT EXISTS loan_product_documents_embedding_hnsw_idx
+            ON loan_product_documents USING hnsw (embedding vector_cosine_ops)
             """);
     }
 }
