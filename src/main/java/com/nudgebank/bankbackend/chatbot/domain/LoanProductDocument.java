@@ -38,8 +38,8 @@ public class LoanProductDocument {
     private String content;
 
     // pgvector
-    @Column(name = "embedding", columnDefinition = "vector")
     @JdbcTypeCode(SqlTypes.VECTOR)
+    @Column(name = "embedding", columnDefinition = "vector(768)")
     private float[] embedding;
 
     @Column(name = "created_at")
