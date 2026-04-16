@@ -439,6 +439,12 @@ public class MyLoanManagementService {
             && application.getLoanProduct().getMaxInterestRate() != null) {
             return application.getLoanProduct().getMaxInterestRate();
         }
+        if (CONSUMPTION_ANALYSIS_TYPE.equals(application.getLoanProduct().getLoanProductType())) {
+            int creditScore = application.getCreditHistory() != null && application.getCreditHistory().getCreditScore() != null
+                ? application.getCreditHistory().getCreditScore()
+                : ConsumptionAnalysisInterestPolicy.MIN_ELIGIBLE_CREDIT_SCORE;
+            return ConsumptionAnalysisInterestPolicy.resolve(creditScore);
+        }
 
         return application.getLoanProduct().getMinInterestRate() != null
             ? application.getLoanProduct().getMinInterestRate()
