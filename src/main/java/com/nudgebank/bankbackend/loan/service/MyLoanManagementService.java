@@ -287,17 +287,7 @@ public class MyLoanManagementService {
                 history.getRepaymentDatetime(),
                 won(history.getRemainingBalance()),
                 history.getPolicyReason(),
-                new MyLoanRepaymentHistoryResponse.TransactionInfo(
-                            history.getTransaction().getTransactionId(),
-                            history.getTransaction().getCard() != null ? history.getTransaction().getCard().getCardId() : null,
-                            history.getTransaction().getMarket() != null ? history.getTransaction().getMarket().getMarketId() : null,
-                            history.getTransaction().getCategory() != null ? history.getTransaction().getCategory().getCategoryId() : null,
-                            history.getTransaction().getQrId(),
-                            won(history.getTransaction().getAmount()),
-                            history.getTransaction().getTransactionDatetime(),
-                            history.getTransaction().getMenuName(),
-                            history.getTransaction().getQuantity()
-                    )
+                toTransactionInfo(history.getTransaction())
             ))
             .toList();
     }
