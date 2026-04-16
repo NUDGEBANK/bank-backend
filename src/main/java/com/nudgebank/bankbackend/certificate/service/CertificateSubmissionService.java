@@ -112,6 +112,8 @@ public class CertificateSubmissionService {
                 savedSubmission.getSubmissionId(),
                 ocrResponse.filename(),
                 ocrResponse.contentType(),
+                "VERIFICATION_COMPLETED",
+                certificateDate != null ? certificateDate.toString() : null,
                 ocrResponse.extractedText(),
                 ocrResponse.lines(),
                 ocrResponse.lineCount(),

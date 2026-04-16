@@ -7,6 +7,8 @@ public record CertificateSubmissionResponse(
         Long submissionId,
         String filename,
         String contentType,
+        String processingStatus,
+        String detectedCertificateDate,
         String extractedText,
         List<String> lines,
         int lineCount,
