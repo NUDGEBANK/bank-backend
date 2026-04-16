@@ -285,7 +285,9 @@ public class MyLoanManagementService {
                 won(history.getRepaymentAmount()),
                 nullSafe(history.getRepaymentRate()),
                 history.getRepaymentDatetime(),
-                won(history.getRemainingBalance())
+                won(history.getRemainingBalance()),
+                history.getPolicyReason(),
+                toTransactionInfo(history.getTransaction())
             ))
             .toList();
     }
