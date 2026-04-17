@@ -29,6 +29,7 @@ public class CardHistoryService {
   private final CardRepository cardRepository;
   private final CardTransactionRepository cardTransactionRepository;
   private final LoanRepaymentHistoryRepository loanRepaymentHistoryRepository;
+  private static final List<String> NON_SPENDING_MENU_NAMES = List.of("넛지 대출", "자기계발 대출");
 
   public CardHistoryService(
       AccountRepository accountRepository,
@@ -138,8 +139,13 @@ public class CardHistoryService {
     OffsetDateTime start = now.atDay(1).atStartOfDay().atOffset(ZoneOffset.ofHours(9));
     OffsetDateTime end = now.plusMonths(1).atDay(1).atStartOfDay().atOffset(ZoneOffset.ofHours(9)).minusNanos(1);
 
-    return cardTransactionRepository.findByCardCardIdAndTransactionDatetimeBetween(cardId, start, end).stream()
-        .map(CardTransaction::getAmount)
-        .reduce(BigDecimal.ZERO, BigDecimal::add);
+    return cardTransactionRepository.findSpendingByCardCardIdAndTransactionDatetimeBetween(
+                    cardId,
+                    start,
+                    end,
+                    NON_SPENDING_MENU_NAMES
+            ).stream()
+            .map(CardTransaction::getAmount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
   }
 }
