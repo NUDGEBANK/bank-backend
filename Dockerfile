@@ -3,6 +3,8 @@ FROM gradle:9.3.0-jdk17-alpine AS builder
 WORKDIR /build
 
 COPY bank-backend/ .
+
+RUN chmod +x gradlew
 RUN ./gradlew bootJar -x test --no-daemon
 
 FROM eclipse-temurin:17-jre
