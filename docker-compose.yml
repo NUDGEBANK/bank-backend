@@ -17,7 +17,9 @@ services:
       - nudge-net
 
   bank-backend:
-    build: .
+    build:
+      context: ..
+      dockerfile: bank-backend/Dockerfile
     container_name: nudge-bank-backend
     restart: unless-stopped
     env_file:
@@ -28,7 +30,9 @@ services:
       - nudge-net
 
   bank-frontend:
-    build: ../bank-frontend
+    build:
+      context: ..
+      dockerfile: bank-frontend/Dockerfile
     container_name: nudge-bank-frontend
     ports:
       - "80:80"
@@ -38,7 +42,9 @@ services:
       - nudge-net
 
   bank-ocr:
-    build: ../bank-ocr
+    build:
+      context: ..
+      dockerfile: bank-ocr/Dockerfile
     container_name: nudge-bank-ocr
     environment:
       - TZ=Asia/Seoul
@@ -46,7 +52,9 @@ services:
       - nudge-net
 
   bank-chatbot:
-    build: ../bank-chatbot
+    build:
+      context: ..
+      dockerfile: bank-chatbot/Dockerfile
     container_name: nudge-bank-chatbot
     env_file:
       - .env
