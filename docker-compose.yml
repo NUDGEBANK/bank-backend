@@ -17,26 +17,22 @@ services:
       - nudge-net
 
   bank-backend:
-    build: .
+    build:
+      context: ..
+      dockerfile: bank-backend/Dockerfile
     container_name: nudge-bank-backend
     restart: unless-stopped
-    environment:
-      DB_URL: jdbc:postgresql://${DB_HOST}:5432/${POSTGRES_DB}
-      DB_USERNAME: ${POSTGRES_USER}
-      DB_PASSWORD: ${POSTGRES_PASSWORD}
-
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS}
-      JWT_REFRESH_TTL_SECONDS: ${JWT_REFRESH_TTL_SECONDS}
-
-      OCR_BASE_URL: ${OCR_BASE_URL}
+    env_file:
+      - .env
     depends_on:
       - postgres
     networks:
       - nudge-net
 
   bank-frontend:
-    build: ../bank-frontend
+    build:
+      context: ..
+      dockerfile: bank-frontend/Dockerfile
     container_name: nudge-bank-frontend
     ports:
       - "80:80"
@@ -46,7 +42,9 @@ services:
       - nudge-net
 
   bank-ocr:
-    build: ../bank-ocr
+    build:
+      context: ..
+      dockerfile: bank-ocr/Dockerfile
     container_name: nudge-bank-ocr
     environment:
       - TZ=Asia/Seoul
@@ -54,16 +52,10 @@ services:
       - nudge-net
 
   bank-chatbot:
-    build: ../bank-chatbot
+    build:
+      context: ..
+      dockerfile: bank-chatbot/Dockerfile
     container_name: nudge-bank-chatbot
-    env_file:
-      - .env
-    networks:
-      - nudge-net
-
-  nudgebank-ai:
-    build: ../nudgebank-ai
-    container_name: nudge-bank-ai
     env_file:
       - .env
     networks:
