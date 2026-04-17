@@ -34,7 +34,7 @@ public class LoanProductInitializer implements CommandLineRunner {
             ),
             new LoanProductSeed(
                 "CONSUMPTION_ANALYSIS",
-                "소비분석 대출",
+                "넛지 대출",
                 "소비패턴 기반 맞춤 대출",
                 "소비 흐름 관리가 필요한 고객",
                 new BigDecimal("5.00"),

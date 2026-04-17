@@ -429,7 +429,7 @@ public class LoanRepaymentService {
             && loan.getLoanApplication() != null
             && loan.getLoanApplication().getLoanProduct() != null
             && CONSUMPTION_ANALYSIS_TYPE.equals(loan.getLoanApplication().getLoanProduct().getLoanProductType())) {
-            return "소비분석 대출 상환";
+            return "넛지 대출 상환";
         }
         return "자기계발 대출 상환";
     }
