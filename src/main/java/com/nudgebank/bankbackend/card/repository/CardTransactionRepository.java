@@ -23,6 +23,20 @@ public interface CardTransactionRepository extends JpaRepository<CardTransaction
   );
 
   @Query("""
+    select ct
+    from CardTransaction ct
+    where ct.card.cardId = :cardId
+      and ct.transactionDatetime between :start and :end
+      and (ct.menuName is null or ct.menuName not in :excludedMenuNames)
+    """)
+  List<CardTransaction> findSpendingByCardCardIdAndTransactionDatetimeBetween(
+          @Param("cardId") Long cardId,
+          @Param("start") OffsetDateTime start,
+          @Param("end") OffsetDateTime end,
+          @Param("excludedMenuNames") List<String> excludedMenuNames
+  );
+
+  @Query("""
         select coalesce(sum(ct.amount), 0)
         from CardTransaction ct
         where ct.card.cardId = :cardId

@@ -34,7 +34,6 @@ public class MyLoanManagementService {
 
     private static final String SELF_DEVELOPMENT_TYPE = "SELF_DEVELOPMENT";
     private static final String CONSUMPTION_ANALYSIS_TYPE = "CONSUMPTION_ANALYSIS";
-    private static final String EMERGENCY_TYPE = "EMERGENCY";
     private static final String MATURITY_LUMP_SUM_TYPE = "MATURITY_LUMP_SUM";
     private static final String EQUAL_INSTALLMENT_TYPE = "EQUAL_INSTALLMENT";
 
@@ -738,7 +737,6 @@ public class MyLoanManagementService {
         return switch (productKey) {
             case "youth-loan" -> SELF_DEVELOPMENT_TYPE;
             case "consumption-loan" -> CONSUMPTION_ANALYSIS_TYPE;
-            case "situate-loan" -> EMERGENCY_TYPE;
             default -> throw new IllegalArgumentException("지원하지 않는 상품입니다. productKey=" + productKey);
         };
     }
@@ -747,7 +745,6 @@ public class MyLoanManagementService {
         return switch (loanProductType) {
             case SELF_DEVELOPMENT_TYPE -> "youth-loan";
             case CONSUMPTION_ANALYSIS_TYPE -> "consumption-loan";
-            case EMERGENCY_TYPE -> "situate-loan";
             default -> loanProductType;
         };
     }

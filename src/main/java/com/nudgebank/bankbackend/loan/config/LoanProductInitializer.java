@@ -34,7 +34,7 @@ public class LoanProductInitializer implements CommandLineRunner {
             ),
             new LoanProductSeed(
                 "CONSUMPTION_ANALYSIS",
-                "소비분석 대출",
+                "넛지 대출",
                 "소비패턴 기반 맞춤 대출",
                 "소비 흐름 관리가 필요한 고객",
                 new BigDecimal("5.00"),
@@ -42,18 +42,6 @@ public class LoanProductInitializer implements CommandLineRunner {
                 10_000_000L,
                 500_000L,
                 12,
-                "EQUAL_INSTALLMENT"
-            ),
-            new LoanProductSeed(
-                "EMERGENCY",
-                "긴급 대출",
-                "긴급 생활안정 자금 대출",
-                "단기 긴급 자금이 필요한 고객",
-                new BigDecimal("5.00"),
-                new BigDecimal("8.00"),
-                2_000_000L,
-                300_000L,
-                6,
                 "EQUAL_INSTALLMENT"
             )
         );

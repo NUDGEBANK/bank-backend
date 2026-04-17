@@ -21,7 +21,6 @@ public class LoanEligibilityService {
     private static final int MIN_ELIGIBLE_CREDIT_SCORE = 500;
     private static final String SELF_DEVELOPMENT_TYPE = "SELF_DEVELOPMENT";
     private static final String CONSUMPTION_ANALYSIS_TYPE = "CONSUMPTION_ANALYSIS";
-    private static final String EMERGENCY_TYPE = "EMERGENCY";
 
     private final CreditHistoryRepository creditHistoryRepository;
     private final LoanProductRepository loanProductRepository;
@@ -69,7 +68,6 @@ public class LoanEligibilityService {
         return switch (productKey) {
             case "youth-loan" -> SELF_DEVELOPMENT_TYPE;
             case "consumption-loan" -> CONSUMPTION_ANALYSIS_TYPE;
-            case "situate-loan" -> EMERGENCY_TYPE;
             default -> throw new IllegalArgumentException("지원하지 않는 상품입니다. productKey=" + productKey);
         };
     }
