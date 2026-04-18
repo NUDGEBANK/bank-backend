@@ -11,6 +11,9 @@ import com.nudgebank.bankbackend.certificate.repository.CertificateMasterReposit
 import java.text.Normalizer;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -149,7 +152,7 @@ public class CertificateVerificationService {
             return dateFromContext;
         }
 
-        return extractDateFromText(compactText);
+        return extractFallbackCertificateDate(compactText);
     }
 
     private LocalDate extractDateFromLabeledPattern(String compactText) {
@@ -185,6 +188,45 @@ public class CertificateVerificationService {
             }
         }
         return null;
+    }
+
+    private LocalDate extractFallbackCertificateDate(String compactText) {
+        List<LocalDate> candidates = new ArrayList<>();
+
+        for (Pattern pattern : DATE_PATTERNS) {
+            Matcher matcher = pattern.matcher(compactText);
+            while (matcher.find()) {
+                int start = Math.max(0, matcher.start() - 20);
+                int end = Math.min(compactText.length(), matcher.end() + 20);
+                String context = compactText.substring(start, end);
+
+                if (containsAnyKeyword(context, DATE_EXCLUDE_KEYWORDS)) {
+                    continue;
+                }
+
+                try {
+                    candidates.add(LocalDate.of(
+                            Integer.parseInt(matcher.group(1)),
+                            Integer.parseInt(matcher.group(2)),
+                            Integer.parseInt(matcher.group(3))
+                    ));
+                } catch (RuntimeException ignored) {
+                    // Continue scanning.
+                }
+            }
+        }
+
+        if (candidates.isEmpty()) {
+            return null;
+        }
+
+        if (candidates.size() == 1) {
+            return candidates.get(0);
+        }
+
+        return candidates.stream()
+                .max(Comparator.naturalOrder())
+                .orElse(null);
     }
 
     private LocalDate extractDateNearLabels(String compactText) {
