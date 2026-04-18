@@ -15,7 +15,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 
@@ -40,14 +39,17 @@ public class ConsumptionAnalysisController {
     public ConsumerPredictionResponse runMyPrediction(Authentication authentication) {
         Long memberId = extractMemberId(authentication);
         OffsetDateTime startedAt = OffsetDateTime.now(KST);
-        LocalDate analysisYearMonth = startedAt.toLocalDate().withDayOfMonth(1);
         try {
             consumptionPredictionPipelineService.runPredictionPipeline();
-            return consumptionAnalysisQueryService.getPredictionForAnalysisMonthUpdatedAfter(
-                memberId,
-                analysisYearMonth,
-                startedAt
-            );
+            try {
+                return consumptionAnalysisQueryService.getPredictionUpdatedAfter(memberId, startedAt);
+            } catch (IllegalStateException ignored) {
+                ConsumerPredictionResponse latest = consumptionAnalysisQueryService.getLatestPrediction(memberId);
+                if (latest != null) {
+                    return latest;
+                }
+                throw ignored;
+            }
         } catch (IllegalStateException exception) {
             log.error("AI prediction pipeline failed for memberId={}", memberId, exception);
             throw new ResponseStatusException(
