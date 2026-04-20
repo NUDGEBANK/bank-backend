@@ -11,6 +11,8 @@ import com.nudgebank.bankbackend.certificate.repository.CertificateMasterReposit
 import java.text.Normalizer;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -28,7 +30,7 @@ public class CertificateVerificationService {
     };
 
     private static final Pattern LABELED_DATE_PATTERN = Pattern.compile(
-            "(\\uCDE8\\uB4DD\\uC77C|\\uCDE8\\uB4DD\\uC77C\\uC790|\\uD569\\uACA9\\uC77C|\\uD569\\uACA9\\uC77C\\uC790|\\uD569\\uACA9\\uC5F0\\uC6D4\\uC77C|\\uBC1C\\uAE09\\uC77C|\\uBC1C\\uAE09\\uC5F0\\uC6D4\\uC77C|\\uC790\\uACA9\\uCDE8\\uB4DD\\uC77C|\\uC790\\uACA9\\uC99D\\uCDE8\\uB4DD\\uC77C|\\uC790\\uACA9\\uC744\\uCDE8\\uB4DD).{0,30}?(20\\d{2})\\uB144(\\d{1,2})\\uC6D4(\\d{1,2})\\uC77C"
+            "(\\uCDE8\\uB4DD\\uC77C|\\uCDE8\\uB4DD\\uC77C\\uC790|\\uD569\\uACA9\\uC77C|\\uD569\\uACA9\\uC77C\\uC790|\\uD569\\uACA9\\uC5F0\\uC6D4\\uC77C|\\uD569\\uACA9\\uB144\\uC6D4\\uC77C|\\uBC1C\\uAE09\\uC77C|\\uBC1C\\uAE09\\uC5F0\\uC6D4\\uC77C|\\uC790\\uACA9\\uCDE8\\uB4DD\\uC77C|\\uC790\\uACA9\\uC99D\\uCDE8\\uB4DD\\uC77C|\\uC790\\uACA9\\uC744\\uCDE8\\uB4DD).{0,40}?(20\\d{2})\\uB144(\\d{1,2})\\uC6D4(\\d{1,2})\\uC77C"
     );
 
     private static final String[] DATE_LABELS = {
@@ -37,6 +39,7 @@ public class CertificateVerificationService {
             "\uD569\uACA9\uC77C",
             "\uD569\uACA9\uC77C\uC790",
             "\uD569\uACA9\uC5F0\uC6D4\uC77C",
+            "\uD569\uACA9\uB144\uC6D4\uC77C",
             "\uBC1C\uAE09\uC77C",
             "\uBC1C\uAE09\uC5F0\uC6D4\uC77C",
             "\uC790\uACA9\uCDE8\uB4DD\uC77C",
@@ -49,14 +52,28 @@ public class CertificateVerificationService {
             "\uD569\uACA9",
             "\uC790\uACA9\uC744\uCDE8\uB4DD",
             "\uD569\uACA9\uD558\uC600\uC74C",
-            "\uD655\uC778\uD569\uB2C8\uB2E4"
+            "\uD655\uC778\uD569\uB2C8\uB2E4",
+            "\uD569\uACA9\uD655\uC778",
+            "\uD569\uACA9\uC99D",
+            "\uD569\uACA9\uC778\uC99D\uC11C",
+            "\uCDE8\uB4DD\uD558\uC600",
+            "\uCDE8\uB4DD\uD558\uC600\uC74C",
+            "\uCDE8\uB4DD\uD569\uB2C8\uB2E4",
+            "\uC790\uACA9\uC744\uCDE8\uB4DD\uD558\uC600",
+            "\uC790\uACA9\uC744\uCDE8\uB4DD\uD558\uC600\uC74C"
     };
 
     private static final String[] DATE_EXCLUDE_KEYWORDS = {
             "\uC720\uD6A8\uAE30\uAC04",
             "\uC0DD\uB144\uC6D4\uC77C",
             "\uCD9C\uB825\uC77C",
-            "\uBC1C\uAE09\uBC88\uD638"
+            "\uBC1C\uAE09\uBC88\uD638",
+            "\uB9CC\uB8CC\uC77C",
+            "\uB9CC\uB8CC\uC5F0\uC6D4\uC77C",
+            "\uC7AC\uBC1C\uAE09",
+            "\uAC31\uC2E0",
+            "\uBCF4\uACE0\uC11C\uC0DD\uC131\uC77C",
+            "\uBC1C\uAE09\uC77C\uC2DC"
     };
 
     private static final String[] PASS_KEYWORDS = {
@@ -149,7 +166,7 @@ public class CertificateVerificationService {
             return dateFromContext;
         }
 
-        return extractDateFromText(compactText);
+        return extractFallbackCertificateDate(compactText);
     }
 
     private LocalDate extractDateFromLabeledPattern(String compactText) {
@@ -187,6 +204,43 @@ public class CertificateVerificationService {
         return null;
     }
 
+    private LocalDate extractFallbackCertificateDate(String compactText) {
+        List<LocalDate> candidates = new ArrayList<>();
+
+        for (Pattern pattern : DATE_PATTERNS) {
+            Matcher matcher = pattern.matcher(compactText);
+            while (matcher.find()) {
+                int start = Math.max(0, matcher.start() - 20);
+                int end = Math.min(compactText.length(), matcher.end() + 20);
+                String context = compactText.substring(start, end);
+
+                if (containsAnyKeyword(context, DATE_EXCLUDE_KEYWORDS)) {
+                    continue;
+                }
+
+                try {
+                    candidates.add(LocalDate.of(
+                            Integer.parseInt(matcher.group(1)),
+                            Integer.parseInt(matcher.group(2)),
+                            Integer.parseInt(matcher.group(3))
+                    ));
+                } catch (RuntimeException ignored) {
+                    // Continue scanning.
+                }
+            }
+        }
+
+        if (candidates.isEmpty()) {
+            return null;
+        }
+
+        if (candidates.size() == 1) {
+            return candidates.get(0);
+        }
+
+        return null;
+    }
+
     private LocalDate extractDateNearLabels(String compactText) {
         for (String label : DATE_LABELS) {
             int labelIndex = compactText.indexOf(label);
@@ -195,7 +249,7 @@ public class CertificateVerificationService {
             }
 
             int start = labelIndex + label.length();
-            int end = Math.min(compactText.length(), start + 40);
+            int end = Math.min(compactText.length(), start + 60);
             LocalDate extractedDate = extractDateFromText(compactText.substring(start, end));
             if (extractedDate != null) {
                 return extractedDate;
@@ -209,8 +263,8 @@ public class CertificateVerificationService {
         for (Pattern pattern : DATE_PATTERNS) {
             Matcher matcher = pattern.matcher(compactText);
             while (matcher.find()) {
-                int start = Math.max(0, matcher.start() - 30);
-                int end = Math.min(compactText.length(), matcher.end() + 30);
+                int start = Math.max(0, matcher.start() - 45);
+                int end = Math.min(compactText.length(), matcher.end() + 45);
                 String context = compactText.substring(start, end);
 
                 if (containsAnyKeyword(context, DATE_EXCLUDE_KEYWORDS)) {
