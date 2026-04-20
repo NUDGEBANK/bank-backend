@@ -7,6 +7,7 @@ import com.nudgebank.bankbackend.auth.domain.Member;
 import com.nudgebank.bankbackend.auth.repository.RefreshTokenRepository;
 import com.nudgebank.bankbackend.auth.repository.MemberRepository;
 import com.nudgebank.bankbackend.auth.security.JwtProvider;
+import com.nudgebank.bankbackend.credit.service.CreditScoreService;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.Optional;
@@ -23,16 +24,19 @@ public class AuthService {
   private final RefreshTokenRepository refreshTokenRepository;
   private final PasswordEncoder passwordEncoder;
   private final JwtProvider jwtProvider;
+  private final CreditScoreService creditScoreService;
   public AuthService(
       MemberRepository memberRepository,
       RefreshTokenRepository refreshTokenRepository,
       PasswordEncoder passwordEncoder,
-      JwtProvider jwtProvider
+      JwtProvider jwtProvider,
+      CreditScoreService creditScoreService
   ) {
     this.memberRepository = memberRepository;
     this.refreshTokenRepository = refreshTokenRepository;
     this.passwordEncoder = passwordEncoder;
     this.jwtProvider = jwtProvider;
+    this.creditScoreService = creditScoreService;
   }
 
   @Transactional
@@ -48,7 +52,7 @@ public class AuthService {
       throw new IllegalArgumentException("DUPLICATE_USER_ID");
     }
 
-    return memberRepository.save(
+    Member savedMember = memberRepository.save(
         Member.create(
             request.userId(),
             request.name(),
@@ -59,6 +63,9 @@ public class AuthService {
             request.phoneNumber()
         )
     );
+
+    creditScoreService.evaluate(savedMember.getMemberId());
+    return savedMember;
   }
 
   public Member login(LoginRequest request) {
