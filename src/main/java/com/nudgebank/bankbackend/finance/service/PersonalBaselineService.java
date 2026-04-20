@@ -43,6 +43,8 @@ public class PersonalBaselineService {
     private static final String LOAN_DISBURSEMENT_CATEGORY_NAME = "대출 실행 입금";
     private static final String LOAN_MARKET_NAME = "NudgeBank 대출 실행";
     private static final String AUTO_REPAYMENT_MENU_NAME = "대출금 자동상환";
+    private static final String LOAN_KEYWORD = "대출";
+    private static final String REPAYMENT_KEYWORD = "상환";
 
     private final MemberRepository memberRepository;
     private final AgeGroupBaselineRepository ageGroupBaselineRepository;
@@ -369,11 +371,19 @@ public class PersonalBaselineService {
                 || LOAN_CATEGORY_NAME.equals(categoryName)
                 || LOAN_DISBURSEMENT_CATEGORY_NAME.equals(categoryName)
                 || LOAN_MARKET_NAME.equals(marketName)
-                || AUTO_REPAYMENT_MENU_NAME.equals(menuName);
+                || AUTO_REPAYMENT_MENU_NAME.equals(menuName)
+                || containsKeyword(categoryName, LOAN_KEYWORD)
+                || containsKeyword(marketName, LOAN_KEYWORD)
+                || containsKeyword(menuName, LOAN_KEYWORD)
+                || containsKeyword(menuName, REPAYMENT_KEYWORD);
     }
 
     private String safe(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private boolean containsKeyword(String value, String keyword) {
+        return value != null && !value.isBlank() && value.contains(keyword);
     }
 
     private String resolveSpendingStatus(
