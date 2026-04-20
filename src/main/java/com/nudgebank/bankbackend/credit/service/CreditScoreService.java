@@ -97,6 +97,11 @@ public class CreditScoreService {
     Optional<CreditHistory> latestOptional = creditHistoryRepository
         .findTopByMemberIdOrderByEvaluatedAtDescCreditHistoryIdDesc(memberId);
 
+    if (latestOptional.isEmpty()) {
+      CreditHistory firstEvaluation = createInitialCreditHistory(memberId);
+      return toResponse(firstEvaluation, null);
+    }
+
     if (latestOptional.isPresent() && isWithinCooldown(latestOptional.get())) {
       CreditHistory latest = latestOptional.get();
       Integer previousScore = findPreviousScore(memberId, latest.getCreditHistoryId());
@@ -109,6 +114,19 @@ public class CreditScoreService {
 
     CreditHistory saved = evaluateAndSave(memberId);
     return toResponse(saved, previousScore);
+  }
+
+  private CreditHistory createInitialCreditHistory(Long memberId) {
+    int initialScore = 500;
+    CreditHistory creditHistory = CreditHistory.create(
+        memberId,
+        initialScore,
+        getGrade(initialScore),
+        "최초 신용 평가는 기본 점수 500점으로 시작합니다.",
+        LocalDateTime.now()
+    );
+
+    return creditHistoryRepository.save(creditHistory);
   }
 
   public CreditHistoryListResponse getHistory(Long memberId) {
