@@ -40,7 +40,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class CreditScoreService {
   private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
   private static final Duration EVALUATION_COOLDOWN = Duration.ofMinutes(5);
-  private static final double BASE_SCORE = 500;
+  private static final double BASE_SCORE = 580;
+  private static final double STARTER_PROFILE_TARGET_SCORE = 500;
+  private static final int EARLY_STAGE_MIN_SCORE = 500;
+  private static final int EARLY_STAGE_MIN_TRANSACTION_COUNT = 6;
   private static final String LOAN_STATUS_OVERDUE = "OVERDUE";
   private static final String LOAN_STATUS_COMPLETED = "COMPLETED";
   private static final String DEPOSIT_STATUS_ACTIVE = "ACTIVE";
@@ -97,11 +100,6 @@ public class CreditScoreService {
     Optional<CreditHistory> latestOptional = creditHistoryRepository
         .findTopByMemberIdOrderByEvaluatedAtDescCreditHistoryIdDesc(memberId);
 
-    if (latestOptional.isEmpty()) {
-      CreditHistory firstEvaluation = createInitialCreditHistory(memberId);
-      return toResponse(firstEvaluation, null);
-    }
-
     if (latestOptional.isPresent() && isWithinCooldown(latestOptional.get())) {
       CreditHistory latest = latestOptional.get();
       Integer previousScore = findPreviousScore(memberId, latest.getCreditHistoryId());
@@ -114,19 +112,6 @@ public class CreditScoreService {
 
     CreditHistory saved = evaluateAndSave(memberId);
     return toResponse(saved, previousScore);
-  }
-
-  private CreditHistory createInitialCreditHistory(Long memberId) {
-    int initialScore = 500;
-    CreditHistory creditHistory = CreditHistory.create(
-        memberId,
-        initialScore,
-        getGrade(initialScore),
-        "최초 신용 평가는 기본 점수 500점으로 시작합니다.",
-        LocalDateTime.now()
-    );
-
-    return creditHistoryRepository.save(creditHistory);
   }
 
   public CreditHistoryListResponse getHistory(Long memberId) {
@@ -277,8 +262,16 @@ public class CreditScoreService {
       score -= 20;
     }
 
+    score += calculateStarterProfileAdjustment(metrics, score);
+
     int roundedScore = (int) Math.round(score);
-    return Math.max(300, Math.min(950, roundedScore));
+    int boundedScore = Math.max(300, Math.min(950, roundedScore));
+
+    if (shouldProtectEarlyStageScore(metrics)) {
+      return Math.max(EARLY_STAGE_MIN_SCORE, boundedScore);
+    }
+
+    return boundedScore;
   }
 
   private Map<YearMonth, BigDecimal> buildMonthlyTotals(List<CardTransaction> transactions, int months) {
@@ -489,9 +482,35 @@ public class CreditScoreService {
     boolean noCardsOrTransactions = metrics.noCards() || metrics.noTransactions();
 
     if (noAccounts && noLoans && noDeposits && noCardsOrTransactions) {
-      return -45;
+      return -42;
     }
     return 0;
+  }
+
+  private double calculateStarterProfileAdjustment(CreditMetrics metrics, double currentScore) {
+    if (!isStarterProfile(metrics)) {
+      return 0;
+    }
+    return STARTER_PROFILE_TARGET_SCORE - currentScore;
+  }
+
+  private boolean isStarterProfile(CreditMetrics metrics) {
+    boolean noLoans = metrics.loanMetrics().loanCount() == 0;
+    boolean noDeposits = metrics.depositMetrics().depositAccountCount() == 0;
+    return metrics.noCards() && metrics.noTransactions() && noLoans && noDeposits;
+  }
+
+  private boolean shouldProtectEarlyStageScore(CreditMetrics metrics) {
+    if (isStarterProfile(metrics)) {
+      return true;
+    }
+
+    boolean noLoans = metrics.loanMetrics().loanCount() == 0;
+    boolean noDeposits = metrics.depositMetrics().depositAccountCount() == 0;
+    boolean lowTransactionVolume = metrics.recentTransactionCount() < EARLY_STAGE_MIN_TRANSACTION_COUNT;
+    boolean noActiveMonths = metrics.activeMonths() == 0;
+
+    return noLoans && noDeposits && lowTransactionVolume && noActiveMonths;
   }
 
   private double scaleScore(double value, double minValue, double maxValue, double maxScore) {
