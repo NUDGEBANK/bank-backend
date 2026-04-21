@@ -133,8 +133,8 @@ public class AutoRepaymentPolicyService {
         }
 
         if (nullSafe(finalBaseline.getRiskRatio()).compareTo(new BigDecimal("0.20")) >= 0) {
-            ratio = ratio.subtract(new BigDecimal("0.01"));
-            reasons.add("위험 소비 비율이 높아 1% 하향 조정합니다.");
+            ratio = ratio.add(new BigDecimal("0.02"));
+            reasons.add("위험 소비 비율이 높아 2% 상향 조정합니다.");
         }
 
         BigDecimal avgSpending = resolvePolicyAvgSpending(finalBaseline);
